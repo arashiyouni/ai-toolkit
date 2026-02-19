@@ -4,6 +4,7 @@
 require "yaml"
 require "pathname"
 require "set"
+require "json"
 
 ROOT = Pathname.new(__dir__).join("..").expand_path
 SKILL_FILES = Dir.glob(ROOT.join("skills/**/SKILL.md").to_s).sort
@@ -13,6 +14,7 @@ ALLOWED_FRONTMATTER_KEYS = Set.new(%w[name description license allowed-tools com
 NAME_PATTERN = /\A[a-z0-9]+(?:-[a-z0-9]+)*\z/
 RESERVED_NAME_PATTERN = /(claude|anthropic)/i
 WHEN_PATTERN = /\b(use when|when users say|when)\b/i
+BUILD_PATTERN = /\A[1-9]\d*\z/
 
 Issue = Struct.new(:severity, :code, :path, :message, keyword_init: true)
 
@@ -114,6 +116,27 @@ def check_frontmatter(path, frontmatter, issues)
   end
 end
 
+def check_metadata(path, frontmatter, issues)
+  metadata = frontmatter["metadata"]
+  active = path.include?("/skills/") && !path.include?("/skills/_drafts/")
+
+  return unless active
+
+  unless metadata.is_a?(Hash)
+    issues << Issue.new(severity: :warn, code: "missing_metadata", path:, message: "Missing `metadata.version` — CI will bootstrap to build 1 on merge.")
+    return
+  end
+
+  if metadata["version"]
+    version = metadata["version"].to_s
+    unless version.match?(BUILD_PATTERN)
+      issues << Issue.new(severity: :error, code: "invalid_version_format", path:, message: "Version `#{version}` must be a positive integer build id (e.g., 1, 2, 3).")
+    end
+  else
+    issues << Issue.new(severity: :warn, code: "missing_version", path:, message: "Missing `metadata.version` — CI will bootstrap to build 1 on merge.")
+  end
+end
+
 def check_structure(path, body, frontmatter, issues)
   active = path.include?("/skills/") && !path.include?("/skills/_drafts/")
 
@@ -153,14 +176,95 @@ def check_links(path, body, issues)
   end
 end
 
+def check_version_consistency(skill_data, issues)
+  # skill_data is array of [path, frontmatter] tuples for active skills
+  marketplace_path = ROOT.join("marketplace.json").to_s
+
+  unless File.exist?(marketplace_path)
+    issues << Issue.new(severity: :error, code: "marketplace_missing", path: marketplace_path, message: "marketplace.json not found.")
+    return
+  end
+
+  marketplace = begin
+    JSON.parse(File.read(marketplace_path))
+  rescue StandardError => error
+    issues << Issue.new(severity: :error, code: "marketplace_json_error", path: marketplace_path, message: "Invalid JSON: #{error.message}")
+    return
+  end
+
+  # Collect versions from active SKILL.md files
+  skill_versions = {}
+  skill_data.each do |path, frontmatter|
+    name = frontmatter["name"]
+    version = frontmatter.dig("metadata", "version")
+    next unless name
+
+    # Skills without a version are not checked for consistency —
+    # CI will bootstrap the version on merge.
+    next unless version
+
+    skill_versions[name] = { version:, path: }
+  end
+
+  return if skill_versions.empty?
+
+  # Check 1: SKILL.md versions must match marketplace.json entries
+  marketplace_skills = (marketplace["skills"] || [])
+  marketplace_index = marketplace_skills.each_with_object({}) { |entry, acc| acc[entry["name"]] = entry }
+
+  skill_versions.each do |name, data|
+    entry = marketplace_index[name]
+    unless entry
+      issues << Issue.new(
+        severity: :error,
+        code: "missing_marketplace_entry",
+        path: data[:path],
+        message: "Active skill `#{name}` is missing from marketplace.json."
+      )
+      next
+    end
+
+    marketplace_version = entry["version"]
+    unless marketplace_version
+      issues << Issue.new(
+        severity: :error,
+        code: "missing_marketplace_version",
+        path: data[:path],
+        message: "Marketplace entry for `#{name}` is missing a version build id."
+      )
+      next
+    end
+
+    skill_version = data[:version].to_s
+    if skill_version != marketplace_version.to_s
+      issues << Issue.new(
+        severity: :error,
+        code: "version_mismatch_marketplace",
+        path: data[:path],
+        message: "Version `#{skill_version}` in SKILL.md does not match marketplace.json version `#{marketplace_version}`."
+      )
+    end
+  end
+end
+
 issues = []
+active_skill_data = []
 
 SKILL_FILES.each do |path|
   frontmatter, body = parse_skill(path, issues)
   check_frontmatter(path, frontmatter, issues)
+  check_metadata(path, frontmatter, issues)
   check_structure(path, body, frontmatter, issues)
   check_links(path, body, issues)
+
+  # Collect active skill data for version consistency checks
+  if path.include?("/skills/") && !path.include?("/skills/_drafts/")
+    active_skill_data << [path, frontmatter]
+  end
 end
+
+# Cross-file version consistency checks
+check_version_consistency(active_skill_data, issues)
 
 puts "Skill files audited: #{SKILL_FILES.count}"
 puts "Active skills audited: #{ACTIVE_SKILL_FILES.count}"

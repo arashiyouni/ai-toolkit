@@ -11,6 +11,7 @@ metadata:
   - type-safety
   - language
   status: ready
+  version: 2
 ---
 
 # Principles

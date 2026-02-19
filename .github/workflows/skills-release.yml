@@ -1,0 +1,137 @@
+name: Skills Release
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "skills/**"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+
+      - name: Detect changed skills
+        id: detect
+        run: |
+          CHANGED=$(git diff --name-only HEAD~1 HEAD -- 'skills/*/SKILL.md' 'skills/*/rules/' 'skills/*/references/' \
+            | grep -v '_drafts' \
+            | sed -n 's|^skills/\([^/]*\)/.*|\1|p' \
+            | sort -u \
+            | tr '\n' ' ')
+          echo "skills=${CHANGED}" >> "$GITHUB_OUTPUT"
+          if [ -z "$CHANGED" ]; then
+            echo "No active skills changed."
+          else
+            echo "Changed skills: $CHANGED"
+          fi
+
+      - name: Sync marketplace.json
+        if: steps.detect.outputs.skills != ''
+        run: |
+          ruby -e "
+          require 'yaml'
+          require 'json'
+
+          marketplace = JSON.parse(File.read('marketplace.json'))
+          skills = marketplace['skills'] ||= []
+          index = skills.each_with_object({}) { |s, h| h[s['name']] = s }
+
+          # Add missing entries for active skills
+          Dir.glob('skills/*/SKILL.md').reject { |f| f.include?('_drafts') }.each do |path|
+            content = File.read(path)
+            next unless content =~ /\\A---\\n(.*?)\\n---\\n/m
+            data = YAML.safe_load(\$1, permitted_classes: [Symbol]) || {}
+            name = data['name']
+            next unless name
+
+            unless index[name]
+              meta = data['metadata'] || {}
+              entry = {
+                'name' => name,
+                'source' => \"./skills/#{name}\",
+                'description' => data['description'].to_s,
+                'category' => meta['category'] || 'universal',
+                'tags' => meta['tags'] || [],
+                'status' => meta['status'] || 'ready',
+                'version' => meta['version'] || 1
+              }
+              skills << entry
+              puts \"Added #{name} to marketplace.json\"
+            end
+          end
+
+          # Remove entries for deleted skills
+          active = Dir.glob('skills/*/SKILL.md').reject { |f| f.include?('_drafts') }.map { |f| File.basename(File.dirname(f)) }
+          removed = skills.reject { |s| active.include?(s['name']) }
+          removed.each { |s| puts \"Removed #{s['name']} from marketplace.json\" }
+          skills.reject! { |s| !active.include?(s['name']) }
+
+          File.write('marketplace.json', JSON.pretty_generate(marketplace) + \"\\n\")
+          "
+
+      - name: Bump builds
+        if: steps.detect.outputs.skills != ''
+        id: bump
+        run: |
+          SKILLS="${{ steps.detect.outputs.skills }}"
+          TAGS=""
+          NAMES=""
+
+          for SKILL in $SKILLS; do
+            SKILL_PATH="skills/${SKILL}/SKILL.md"
+            if [ ! -f "$SKILL_PATH" ]; then
+              echo "::warning::Skill file not found: $SKILL_PATH"
+              continue
+            fi
+
+            NEW_BUILD=$(ruby scripts/skill_version.rb "$SKILL_PATH")
+
+            TAG="skill-${SKILL}-b${NEW_BUILD}"
+            TAGS="${TAGS} ${TAG}"
+            NAMES="${NAMES} ${SKILL}"
+            echo "Bumped ${SKILL} to build ${NEW_BUILD} (${TAG})"
+          done
+
+          echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
+          echo "names=${NAMES}" >> "$GITHUB_OUTPUT"
+
+      - name: Validate
+        if: steps.detect.outputs.skills != ''
+        run: ruby scripts/skills_audit.rb
+
+      - name: Commit and tag
+        if: steps.detect.outputs.skills != ''
+        run: |
+          NAMES="${{ steps.bump.outputs.names }}"
+          TAGS="${{ steps.bump.outputs.tags }}"
+          TRIMMED=$(echo "$NAMES" | xargs)
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add skills/*/SKILL.md marketplace.json
+          git commit -m "chore: release ${TRIMMED}"
+
+          for TAG in $TAGS; do
+            SKILL=$(echo "$TAG" | sed 's/^skill-//;s/-b[0-9]*$//')
+            BUILD=$(echo "$TAG" | sed 's/.*-b//')
+            git tag -a "$TAG" -m "Release ${SKILL} build ${BUILD}"
+            echo "Tagged ${TAG}"
+          done
+
+          git push origin main
+          git push origin --tags

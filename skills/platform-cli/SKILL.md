@@ -12,6 +12,7 @@ metadata:
   - commands
   - flags
   status: ready
+  version: 2
 ---
 
 # CLI Development Patterns

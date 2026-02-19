@@ -12,6 +12,7 @@ metadata:
   - components
   - state
   status: ready
+  version: 2
 ---
 
 # Principles

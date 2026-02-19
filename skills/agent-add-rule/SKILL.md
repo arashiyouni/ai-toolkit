@@ -3,8 +3,8 @@ name: agent-add-rule
 description: 'Add a new rule, convention, or instruction to the project''s agent configuration.
   Analyzes the rule and helps decide placement: root CLAUDE.md (universal rules),
   docs/agents/ files (topic-specific guidance), or a new skill (complex workflows).
-  Use when users say: ''/agent-add-rule'', ''add a rule'', ''add convention'', ''new coding
-  standard'', ''add instruction for claude'', ''update claude.md with''.
+  Use when users say: ''/agent-add-rule'', ''add a rule'', ''add convention'', ''new
+  coding standard'', ''add instruction for claude'', ''update claude.md with''.
 
   '
 metadata:
@@ -15,6 +15,7 @@ metadata:
   - claude-md
   - configuration
   status: ready
+  version: 2
 ---
 
 # Add Rule — Place Agent Instructions Correctly

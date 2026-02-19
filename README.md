@@ -2,170 +2,54 @@
 
 A la carte AI skills for LLM-assisted development across platforms.
 
-## Installation
+## Quick Start
 
 ```bash
-# Add a skill
+# Add a skill (latest build)
 npx skills add ravnhq/ai-toolkit -s core-coding-standards
-npx skills add ravnhq/ai-toolkit -s tech-react
-
-# Add multiple skills at once
-npx skills add ravnhq/ai-toolkit -s core-coding-standards -s lang-typescript -s platform-frontend -s tech-react
 
 # List available skills
 npx skills add ravnhq/ai-toolkit -l
+
+# Update installed skills
+npx skills update
 ```
 
----
+## Versioning
 
-## Skill Hierarchy
-
-Skills use a **layered architecture**: generic platform rules + specific framework rules. Install generic skills first, then framework-specific ones.
-
-| Layer | Generic | Specific |
-|-------|---------|----------|
-| Frontend | `platform-frontend` | `tech-react` |
-| Backend | `platform-backend` | `tech-trpc` |
-| Database | `platform-database` | `tech-drizzle` |
-| Testing | `platform-testing` | `tech-vitest` |
-
-## Skill Composition Matrix
-
-Use this table to combine skills intentionally and avoid overlap conflicts:
-
-| Task Type | Primary Skill | Add Secondary Skill When | Priority Rule |
-|-----------|---------------|--------------------------|---------------|
-| Frontend architecture/state/data flow | `platform-frontend` | `tech-react` only for React hook/effect/render details | Architecture decisions from `platform-frontend` win |
-| Visual UI implementation | `design-frontend` | `design-accessibility` for all production UI reviews | Accessibility requirements win over visual preferences |
-| API/service design | `platform-backend` | `tech-trpc` when tRPC procedures/routers are in scope | Security/validation rules from `platform-backend` win |
-| Testing strategy | `platform-testing` | `tech-vitest` when Vitest APIs (vi.mock/fake timers) are required | Test boundary decisions from `platform-testing` win |
-| SQL schema/migrations | `platform-database` | `tech-drizzle` for Drizzle-specific patterns | Data safety/migration rules from `platform-database` win |
-
----
-
-## Skills
-
-### Universal
-
-| Skill | Description | Rules | Status |
-|-------|-------------|-------|--------|
-| `core-coding-standards` | KISS, DRY, clean code, code review | 2 | **Ready** |
-| `lang-typescript` | Strict mode, no any, discriminated unions | 4 | **Ready** |
-
-### Platform Layers (Generic)
-
-| Skill | Description | Rules |
-|-------|-------------|-------|
-| `platform-frontend` | State management, components, data fetching | 6 |
-| `platform-backend` | API design, services, error handling | 13 |
-| `platform-database` | Queries, migrations, performance | 17 |
-| `platform-testing` | Test philosophy, structure, mocking | 3 |
-| `platform-cli` | CLI design, commands, flags, modern UX | — |
-
-### Frameworks
-
-| Skill | Extends | Description | Rules |
-|-------|---------|-------------|-------|
-| `tech-react` | `platform-frontend` | Components, hooks, state, performance | 8 |
-| `tech-trpc` | `platform-backend` | Procedures, routers, Vertical Slice Architecture | 8 |
-| `tech-drizzle` | `platform-database` | Relational queries, schema, migrations | 9 |
-| `tech-vitest` | `platform-testing` | vi.mock, vi.fn, fake timers | 7 |
-| `swift-concurrency` | — | async/await, actors, tasks, Sendable | — |
-
-### Design & UX
-
-| Skill | Description | Rules |
-|-------|-------------|-------|
-| `design-frontend` | Layouts, responsive, Tailwind tokens | 7 |
-| `design-accessibility` | WCAG AA, screen readers, keyboard nav | 4 |
-| `liquid-glass-ios` | Apple Liquid Glass for iOS 26+ | — |
-
-### Agent Workflow
-
-These skills configure the AI agent itself (CLAUDE.md, docs/agents/, skills). They are distributable via `npx add-skill` and dogfooded by this toolkit via symlinks.
-
-| Skill | Description | Status |
-|-------|-------------|--------|
-| `agent-init-deep` | Initialize or migrate to progressive disclosure CLAUDE.md structure | **Ready** |
-| `agent-add-rule` | Classify and place new rules in the right config location | **Ready** |
-| `agent-skill-creator` | Guide for creating effective skills with scripts, references, and assets | **Ready** |
-
-Scaffold skills (in development) are in `skills/_drafts/`. See `marketplace.json` for the full catalog including drafts.
-
----
-
-## Stack Recipes
-
-| Project Type | Skills |
-|--------------|--------|
-| React web app | `core-coding-standards`, `lang-typescript`, `platform-frontend`, `tech-react`, `design-accessibility` |
-| TanStack Start + tRPC | `core-coding-standards`, `lang-typescript`, `platform-frontend`, `tech-react`, `tech-trpc`, `tech-drizzle` |
-| Next.js | `core-coding-standards`, `lang-typescript`, `platform-frontend`, `tech-react` |
-| iOS app | `core-coding-standards`, `swift-concurrency`, `liquid-glass-ios`, `design-accessibility` |
-| Node.js API | `core-coding-standards`, `lang-typescript`, `platform-backend`, `tech-trpc`, `tech-drizzle` |
-
----
-
-## Skill Structure (Vercel Pattern)
-
-Each skill follows the [Vercel agent-skills](https://github.com/vercel-labs/agent-skills) pattern:
-
-```
-skills/[skill-name]/
-├── SKILL.md              # Skill instructions + frontmatter metadata
-├── rules/                # Rule files (optional)
-│   ├── _sections.md      # Section definitions
-│   └── [prefix]-*.md     # Individual rules
-├── references/           # Long-form guidance loaded on demand (optional)
-├── scripts/              # Executable helpers for deterministic tasks (optional)
-└── assets/               # Templates/resources used in outputs (optional)
-```
-
-### Rule File Format
-
-```markdown
----
-title: Rule Title
-impact: CRITICAL | HIGH | MEDIUM | LOW
-impactDescription: Optional (e.g., "2-10× improvement")
-tags: tag1, tag2
----
-
-## Rule Title
-
-Brief explanation of why this matters.
-
-**Incorrect (description):**
-\`\`\`typescript
-// Bad code
-\`\`\`
-
-**Correct (description):**
-\`\`\`typescript
-// Good code
-\`\`\`
-
-**Why it matters:** Consequences of the incorrect approach.
-```
-
----
-
-## Skill Quality Checks
+Skills use per-skill build IDs (positive integers). The catalog has no global version.
 
 ```bash
-ruby scripts/skills_audit.rb
-ruby scripts/skills_harness.rb
+# Latest (default)
+npx skills add ravnhq/ai-toolkit -s core-coding-standards
+
+# Pin to a specific build
+npx skills add https://github.com/ravnhq/ai-toolkit/tree/skill-core-coding-standards-b12 -s core-coding-standards
 ```
 
-These checks enforce schema, link integrity, trigger examples, troubleshooting structure, and size/performance guardrails.
+## Auto-Updates
 
----
+- `npx skills update` upgrades each installed skill to its latest build unless pinned.
+
+## Catalog
+
+See `marketplace.json` for the full catalog. Drafts live in `skills/_drafts/`.
+
+## Docs
+
+- `docs/skill-versioning.md`
+- `scripts/skills_audit.rb`
+- `scripts/skills_harness.rb`
+
+## Help
+
+- Check `docs/skill-versioning.md` first.
+- Run `ruby scripts/skills_audit.rb` and `ruby scripts/skills_harness.rb` to diagnose issues.
+- Open an issue in the repo with repro steps and relevant logs.
 
 ## Contributing
 
-1. Pick a skill from the tables above
-2. Create or edit `skills/[name]/` following the Vercel pattern structure
-3. Add rules following the rule file format above
-4. Run `ruby scripts/skills_audit.rb` and `ruby scripts/skills_harness.rb`
-5. Update status in this README
-6. Submit PR
+1. Create or edit a skill in `skills/<name>/`.
+2. Open a PR to `main`.
+
+CI handles the rest: validation, `marketplace.json` sync, build bumps, and release tags all run automatically on merge.

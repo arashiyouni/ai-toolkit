@@ -12,6 +12,7 @@ metadata:
   - responsive
   - web
   status: ready
+  version: 2
 ---
 
 # Rules
