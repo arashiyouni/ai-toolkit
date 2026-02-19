@@ -101,3 +101,67 @@ After creating the PR, output:
 - NEVER push if the branch is behind the remote — warn the user.
 - If the branch has no remote tracking, push with `-u` before creating the PR.
 - Always use the project's actual template structure, not a generic one.
+
+## Examples
+
+### Positive Trigger
+
+User: "Create a PR for this feature"
+
+Expected behavior: Use `agent-pr-creator` workflow to analyze git history, read the PR template, fill all sections intelligently, and create the PR via `gh pr create`.
+
+---
+
+User: "I need to open a pull request with a good description"
+
+Expected behavior: Use `agent-pr-creator` to gather context from commits and diffs, analyze changes to determine PR type (feat/fix/refactor), detect breaking changes, and create a comprehensive PR with proper title and body.
+
+---
+
+User: "Make a PR to main"
+
+Expected behavior: Use `agent-pr-creator` to detect base branch, analyze all changes since branching, fill the template following project conventions, and create the PR.
+
+### Non-Trigger
+
+User: "Review this pull request: https://github.com/org/repo/pull/123"
+
+Expected behavior: Do not use `agent-pr-creator`. The user wants to review an existing PR, not create one. Use `gh pr view` or similar tools instead.
+
+---
+
+User: "What changes are in my branch?"
+
+Expected behavior: Do not use `agent-pr-creator`. The user wants to see changes, not create a PR. Use `git diff` or `git log` instead.
+
+## Troubleshooting
+
+### Skill Does Not Trigger
+
+- Error: The skill is not selected when the user asks to create a PR.
+- Cause: Request wording does not match the description trigger conditions.
+- Solution: Rephrase with explicit PR creation keywords like "create a pull request", "make a PR", or "open a PR" and retry.
+
+### PR Template Not Found
+
+- Error: Cannot find `.github/PULL_REQUEST_TEMPLATE.md`.
+- Cause: Project does not have a PR template, or it's in a non-standard location.
+- Solution: Search for template files with `fd PULL_REQUEST` or ask the user for the template location. If no template exists, create a basic PR with just title and description.
+
+### PR Already Exists
+
+- Error: `gh pr create` fails because a PR already exists for this branch.
+- Cause: The branch already has an open PR.
+- Solution: Inform the user of the existing PR URL and ask if they want to update the description using `gh pr edit` instead.
+
+### Uncommitted Changes Warning
+
+- Error: Cannot create PR due to uncommitted changes.
+- Cause: Working directory has unstaged or uncommitted changes.
+- Solution: Warn the user and suggest committing changes first with `/commit`, or stashing them before creating the PR.
+
+### Missing Remote Tracking Branch
+
+- Error: `gh pr create` fails because branch has no upstream.
+- Cause: Local branch has never been pushed to remote.
+- Solution: Push the branch first with `git push -u origin <branch-name>`, then create the PR.
