@@ -108,7 +108,7 @@ After creating the PR, output:
 
 ### Positive Trigger
 
-User: "Create a PR for this feature"
+User: "fill the PR template and create a pull request for my branch"
 
 Expected behavior: Use `agent-pr-creator` workflow to analyze git history, read the PR template, fill all sections intelligently, and create the PR via `gh pr create`.
 
