@@ -417,9 +417,9 @@
     },
     {
       "name": "agent-pr-creator",
-      "source": "./skills/agent-pr-creator",
+      "source": "./skills/assistant/agent-pr-creator",
       "description": "Analyzes git diffs and commit history to intelligently fill PR templates and create pull requests via gh CLI.",
-      "category": "agent",
+      "category": "assistant",
       "tags": [
         "agent",
         "git",

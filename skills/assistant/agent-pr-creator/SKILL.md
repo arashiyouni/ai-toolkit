@@ -2,7 +2,7 @@
 name: agent-pr-creator
 description: Analyzes git diffs and commit history to intelligently fill PR templates and create pull requests via gh CLI. Use when user wants to create a PR, needs PR description help, or says 'create a pull request', 'fill PR template', 'make a PR', 'open a pull request', or mentions PR creation.
 metadata:
-  category: agent
+  category: assistant
   tags:
   - git
   - pull-request
