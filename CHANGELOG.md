@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-02-27
+
+- Organized skills into category subdirectories (`skills/<category>/<name>/`) matching the five-tier hierarchy: universal, platform, framework, design, assistant. (#8)
+- Added `agent-pr-creator` skill for automated PR creation. (#10)
+- Added blog post on context switching done right. (#11)
+- Added validation checklist reference to `agent-skill-creator`.
+
 ## 2026-02-16
 
 - Removed project overrides system (SKILL.md sections, `add_project_overrides.rb` script, docs).
