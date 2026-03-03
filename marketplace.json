@@ -210,6 +210,24 @@
       "version": 3
     },
     {
+      "name": "figma-to-react-components",
+      "source": "./skills/design/figma-to-react-components",
+      "description": "Convert Figma component designs into production-ready React implementations with design token integration, accessibility via React Aria, and comprehensive documentation. Use when building React components from Figma designs, generating component implementation specs, or bridging design-to-development workflows.",
+      "category": "design",
+      "tags": [
+        "figma",
+        "react",
+        "design-tokens",
+        "component-generation",
+        "accessibility",
+        "react-aria",
+        "design-handoff"
+      ],
+      "status": "ready",
+      "rules": 5,
+      "version": 2
+    },
+    {
       "name": "liquid-glass-ios",
       "source": "./skills/design/liquid-glass-ios",
       "description": "Apple's Liquid Glass design system for iOS 26+ and iPadOS 26+.",
@@ -308,6 +326,21 @@
         "workflow",
         "automation",
         "gh-cli"
+      ],
+      "status": "ready",
+      "version": 1
+    },
+    {
+      "name": "rewrite-commit-history",
+      "source": "./skills/assistant/rewrite-commit-history",
+      "description": "Rewrite a feature branch's commit history into clean conventional commits.",
+      "category": "assistant",
+      "tags": [
+        "git",
+        "commits",
+        "history",
+        "conventional-commits",
+        "rewrite"
       ],
       "status": "ready",
       "version": 2
