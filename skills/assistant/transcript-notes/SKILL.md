@@ -51,13 +51,13 @@ Convert a raw meeting transcript `.txt` file into a structured `.md` notes file.
 ## Output Template
 
 ```markdown
-# {Series Name} - Episode {NNN}
+# {Series Name} - {Episode NNN or Date}
 
 ## Meeting Metadata
 - **Series:** {series name}
-- **Episode:** {NNN}
-- **Date:** {date}
-- **Duration:** {duration}
+- **Episode:** {NNN, if applicable}
+- **Date:** {date, if inferable}
+- **Duration:** {duration, if inferable}
 - **Participants:** {comma-separated full names}
 
 ## TL;DR
