@@ -11,6 +11,8 @@ metadata:
   - notes
   - meeting
   - documentation
+  - action-items
+  - summary
   status: ready
   version: 1
 ---
