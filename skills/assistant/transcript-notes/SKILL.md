@@ -95,7 +95,7 @@ Convert a raw meeting transcript `.txt` file into a structured `.md` notes file.
 
 ### Positive Trigger
 
-User: "Process the transcript at transcripts/ai-platform-sync/003.txt into structured notes with metadata and action items"
+User: "Process the meeting transcript at transcripts/ai-platform-sync/003.txt — generate formatted notes with metadata, key topics, action items, and quotes"
 
 Expected behavior: Reads the transcript file, extracts participants, topics, action items, and quotes, then writes a structured `.md` notes file.
 
