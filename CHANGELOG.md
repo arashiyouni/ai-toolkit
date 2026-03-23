@@ -2,6 +2,7 @@
 
 ## 2026-03-23
 
+- Used uv run --script in SKILL.md invocation examples.
 - Added real-time progress reporting to workflow.
 ## 2026-03-21
 
