@@ -16,15 +16,15 @@ Usage:
 """
 import argparse
 import json
-import subprocess
 import sys
-import tempfile
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
+
+from _common import claude_pipe, strip_markdown_fences
 
 RESULTS_DIR = Path(__file__).parent / "results"
 
@@ -43,33 +43,6 @@ Be strict — partial compliance is a FAIL.
 Reply with ONLY valid JSON, no markdown fences, no commentary.
 Keep the "evidence" field under 100 characters.
 Format: {"verdict":"PASS","evidence":"...","triggered_criteria":[],"triggered_fail_signals":[]}"""
-
-
-def claude_pipe(
-    prompt: str,
-    model: str | None = None,
-    system_file: Path | None = None,
-    timeout: int = 300,
-) -> str:
-    cmd = ["claude", "-p", "--output-format", "text"]
-    if model:
-        cmd.extend(["--model", model])
-    if system_file:
-        cmd.extend(["--system-prompt-file", str(system_file)])
-    result = subprocess.run(
-        cmd,
-        input=prompt,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-    )
-    if result.returncode != 0:
-        raise RuntimeError(
-            f"claude -p failed (rc={result.returncode}):\n"
-            f"  stderr: {result.stderr[:500]}\n"
-            f"  stdout: {result.stdout[:500]}"
-        )
-    return result.stdout.strip()
 
 
 def load_scenarios(path: Path, ids: list[str] | None = None) -> list[dict]:
@@ -105,20 +78,9 @@ def judge(scenario: dict, response: str, timeout: int = 300) -> dict:
 ## Fail Signals
 {yaml.dump(scenario['fail_signals'], default_flow_style=False)}"""
 
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
-        f.write(JUDGE_SYSTEM)
-        judge_file = Path(f.name)
-    try:
-        raw = claude_pipe(judge_prompt, model="haiku", system_file=judge_file, timeout=timeout)
-    finally:
-        judge_file.unlink(missing_ok=True)
+    raw = claude_pipe(judge_prompt, model="haiku", system_prompt=JUDGE_SYSTEM, timeout=timeout)
 
-    text = raw.strip()
-    if text.startswith("```"):
-        text = "\n".join(text.split("\n")[1:])
-        if text.endswith("```"):
-            text = text[:-3]
-        text = text.strip()
+    text = strip_markdown_fences(raw)
     try:
         return json.loads(text)
     except json.JSONDecodeError:

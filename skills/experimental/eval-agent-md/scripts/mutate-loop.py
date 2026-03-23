@@ -25,6 +25,8 @@ from pathlib import Path
 
 import yaml
 
+from _common import claude_pipe, strip_markdown_fences
+
 SKILL_DIR = Path(__file__).parent
 EVAL_SCRIPT = SKILL_DIR / "eval-behavioral.py"
 RESULTS_DIR = SKILL_DIR / "results"
@@ -59,25 +61,7 @@ Reply with ONLY a JSON object (no markdown fences):
 {{"section": "which rule/gate", "change_description": "what to change and why", "old_text": "exact text to find in the file", "new_text": "replacement text"}}"""
 
 
-def claude_pipe(prompt: str, model: str = "sonnet", timeout: int = 120) -> str:
-    system = "You are a prompt engineering assistant. Reply with only the requested JSON."
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
-        f.write(system)
-        sys_file = Path(f.name)
-    try:
-        result = subprocess.run(
-            ["claude", "-p", "--output-format", "text", "--model", model,
-             "--system-prompt-file", str(sys_file)],
-            input=prompt,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-    finally:
-        sys_file.unlink(missing_ok=True)
-    if result.returncode != 0:
-        raise RuntimeError(f"claude -p failed: {result.stderr[:300]}")
-    return result.stdout.strip()
+MUTATION_SYSTEM = "You are a prompt engineering assistant. Reply with only the requested JSON."
 
 
 def _count_scenarios(scenarios_file: Path, scenario_ids: list[str] | None) -> int:
@@ -87,13 +71,15 @@ def _count_scenarios(scenarios_file: Path, scenario_ids: list[str] | None) -> in
     return len(scenarios)
 
 
-def run_eval(target: Path, scenarios_file: Path, scenario_ids: list[str] | None, runs: int, model: str) -> dict:
+def run_eval(target: Path, scenarios_file: Path, scenario_ids: list[str] | None,
+             runs: int, model: str, per_call_timeout: int = 240) -> dict:
     cmd = [str(EVAL_SCRIPT), "--runs", str(runs), "--model", model,
-           "--claude-md", str(target), "--scenarios-file", str(scenarios_file)]
+           "--claude-md", str(target), "--scenarios-file", str(scenarios_file),
+           "--timeout", str(per_call_timeout)]
     if scenario_ids:
         cmd.extend(scenario_ids)
     n = _count_scenarios(scenarios_file, scenario_ids)
-    timeout = max(300, n * runs * 30 + 60)
+    timeout = max(300, n * runs * 90 + 60)
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
     if result.returncode != 0:
         print(f"  Eval stderr: {result.stderr[:300]}", file=sys.stderr)
@@ -105,14 +91,16 @@ def run_eval(target: Path, scenarios_file: Path, scenario_ids: list[str] | None,
 
 
 def run_ab(baseline: Path, mutated: Path, scenarios_file: Path,
-           scenario_ids: list[str] | None, runs: int, model: str) -> tuple:
+           scenario_ids: list[str] | None, runs: int, model: str,
+           per_call_timeout: int = 240) -> tuple:
     cmd = [str(EVAL_SCRIPT), "--runs", str(runs), "--model", model,
            "--claude-md", str(baseline), "--mutate", str(mutated),
-           "--scenarios-file", str(scenarios_file)]
+           "--scenarios-file", str(scenarios_file),
+           "--timeout", str(per_call_timeout)]
     if scenario_ids:
         cmd.extend(scenario_ids)
     n = _count_scenarios(scenarios_file, scenario_ids)
-    timeout = max(300, n * runs * 30 * 2 + 60)  # 2x for baseline + mutated
+    timeout = max(300, n * runs * 90 * 2 + 60)  # 2x for baseline + mutated
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
     return result, result.stdout
 
@@ -145,13 +133,8 @@ def generate_mutation(config_content: str, scenario: dict, scenarios_file: Path)
 
     line_count = len(config_content.splitlines())
     timeout = max(60, line_count)
-    raw = claude_pipe(prompt, model="sonnet", timeout=timeout)
-    text = raw.strip()
-    if text.startswith("```"):
-        text = "\n".join(text.split("\n")[1:])
-        if text.endswith("```"):
-            text = text[:-3]
-        text = text.strip()
+    raw = claude_pipe(prompt, model="sonnet", system_prompt=MUTATION_SYSTEM, timeout=timeout)
+    text = strip_markdown_fences(raw)
     try:
         return json.loads(text)
     except json.JSONDecodeError:
@@ -205,6 +188,7 @@ def main():
     parser.add_argument("--max-iterations", type=int, default=5, help="Max mutation attempts")
     parser.add_argument("--runs", type=int, default=3, help="Runs per scenario for majority vote")
     parser.add_argument("--model", default="sonnet", help="Model for behavioral tests")
+    parser.add_argument("--timeout", type=int, default=240, help="Per-call claude -p timeout in seconds (default: 240)")
     parser.add_argument("--scenarios", nargs="*", help="Scenario IDs to focus on")
     parser.add_argument("--apply", action="store_true", help="Apply winning mutations (default: dry-run)")
 
@@ -232,7 +216,7 @@ def main():
     print(f"\n{'=' * 60}")
     print("  Baseline evaluation")
     print(f"{'=' * 60}")
-    baseline_results = run_eval(args.target, args.scenarios_file, args.scenarios, args.runs, args.model)
+    baseline_results = run_eval(args.target, args.scenarios_file, args.scenarios, args.runs, args.model, args.timeout)
     baseline_passed = baseline_results["summary"]["passed"]
     baseline_total = baseline_results["summary"]["total"]
     print(f"  Baseline: {baseline_passed}/{baseline_total} ({_fmt_elapsed(t_start)})")
@@ -292,7 +276,7 @@ def main():
             _progress(i, args.max_iterations, target_scenario["id"], "A/B test", t_start, stats)
             print("  Running A/B comparison...", flush=True)
             ab_result, ab_stdout = run_ab(args.target, mutated_path, args.scenarios_file,
-                                          args.scenarios, args.runs, args.model)
+                                          args.scenarios, args.runs, args.model, args.timeout)
             print(ab_stdout)
 
             delta_line = [l for l in ab_stdout.split("\n") if "Delta:" in l]
@@ -334,7 +318,7 @@ def main():
 
         if args.apply and delta > 0:
             _progress(i, args.max_iterations, target_scenario["id"], "re-eval", t_start, stats)
-            reeval = run_eval(args.target, args.scenarios_file, args.scenarios, args.runs, args.model)
+            reeval = run_eval(args.target, args.scenarios_file, args.scenarios, args.runs, args.model, args.timeout)
             failing = find_failing_scenarios(reeval)
         else:
             failing = failing[1:]

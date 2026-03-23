@@ -31,6 +31,10 @@ metadata:
 
 ## Workflow
 
+### Script Execution
+
+**Always run scripts with `uv run --script`** — never invoke them directly with `python` or `python3`. The scripts declare their own dependencies via inline `# /// script` metadata, and `uv run --script` handles dependency resolution automatically with no pip install needed.
+
 ### Progress Reporting
 
 This skill runs long operations (30s-5min per step). **Always keep the user informed:**
@@ -41,13 +45,14 @@ This skill runs long operations (30s-5min per step). **Always keep the user info
 
 ### Step 1: Locate the target file
 
-Find the CLAUDE.md to test. Priority order:
+Find the target file to test. Priority order:
+0. If user passed `--self`, target is `[SKILL_DIR]/SKILL.md` — skip to confirmation below
 1. If user provided a path argument (e.g., `/eval-agent-md ./CLAUDE.md`), use that
 2. If a project-level CLAUDE.md exists in the current working directory, use that
 3. Fall back to `~/.claude/CLAUDE.md` (user global)
 4. If none found, ask the user
 
-Read the file and confirm with the user: "I found your CLAUDE.md at [path] ([N] lines). Testing this file."
+Read the file and confirm with the user: "I found [filename] at [path] ([N] lines). Testing this file."
 
 ### Step 2: Generate test scenarios
 
@@ -57,6 +62,10 @@ Run the scenario generator script bundled with this skill. **IMPORTANT: Do NOT c
 
 ```bash
 uv run --script [SKILL_DIR]/scripts/generate-scenarios.py [TARGET_FILE]
+# For SKILL.md files, add --skill for workflow-aware scenarios:
+# uv run --script [SKILL_DIR]/scripts/generate-scenarios.py --skill [TARGET_FILE]
+# For self-testing (implies --skill):
+# uv run --script [SKILL_DIR]/scripts/generate-scenarios.py --self
 ```
 
 The script auto-detects the repository name from git and saves to `/tmp/eval-agent-md-<repo>-scenarios.yaml` (e.g., `/tmp/eval-agent-md-my-project-scenarios.yaml`). Override with `--repo-name NAME` or `-o PATH`.
@@ -134,6 +143,8 @@ Parse the user's `/eval-agent-md` invocation for these optional arguments:
 - `--model MODEL` — model for test subject (default: sonnet)
 - `--compare-models` — cross-model comparison (haiku/sonnet/opus)
 - `--agent` — hint that the target is an agent definition file (adjusts generation style)
+- `--skill` — hint that the target is a SKILL.md file (focuses scenarios on workflow order, argument contracts, progress reporting)
+- `--self` — auto-resolve to this skill's own SKILL.md for dogfooding (implies `--skill`, ignores path argument)
 
 ## Examples
 
@@ -142,6 +153,12 @@ Parse the user's `/eval-agent-md` invocation for these optional arguments:
 User: "Run compliance tests against my CLAUDE.md to check if all rules are being followed."
 
 Expected behavior: Use `eval-agent-md` workflow — locate the CLAUDE.md, generate test scenarios, run behavioral tests, and report compliance results.
+
+### Self-Test (Dogfooding)
+
+User: "/eval-agent-md --self"
+
+Expected behavior: Resolve target to this skill's own SKILL.md, generate workflow-aware scenarios (step ordering, user confirmations, progress reporting, argument handling), run behavioral tests, and report compliance. Optionally improve failing rules via mutation loop.
 
 ### Non-Trigger
 
