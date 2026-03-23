@@ -425,8 +425,8 @@
     },
     {
       "name": "eval-agent-md",
-      "source": "./skills/assistant/eval-agent-md",
-      "description": "Behavioral compliance testing for any CLAUDE.md or agent definition file. Auto-generates test scenarios from your rules, runs them via LLM-as-judge scoring, and reports compliance. Optionally improves failing rules via automated mutation loop.\n",
+      "source": "./skills/experimental/eval-agent-md",
+      "description": "Behavioral compliance testing for any CLAUDE.md or agent definition file. Auto-generates test scenarios from your rules, runs them via LLM-as-judge scoring, and reports a compliance score with per-rule pass/fail breakdown. Optionally improves failing rules via automated mutation loop.",
       "category": "assistant",
       "tags": [
         "testing",
@@ -437,7 +437,7 @@
         "quality"
       ],
       "status": "experimental",
-      "version": 2
+      "version": 3
     }
   ],
   "drafts": [
@@ -550,7 +550,7 @@
     {
       "name": "eval-agent-md",
       "source": "./skills/experimental/eval-agent-md",
-      "description": "Behavioral compliance testing for any CLAUDE.md or agent definition file. Auto-generates test scenarios, runs them via LLM-as-judge scoring, and reports compliance.",
+      "description": "Behavioral compliance testing for any CLAUDE.md or agent definition file. Auto-generates test scenarios from your rules, runs them via LLM-as-judge scoring, and reports a compliance score with per-rule pass/fail breakdown. Optionally improves failing rules via automated mutation loop.",
       "category": "assistant",
       "tags": [
         "testing",
@@ -559,7 +559,9 @@
         "behavioral",
         "meta",
         "quality"
-      ]
+      ],
+      "status": "experimental",
+      "version": 3
     }
   ]
 }

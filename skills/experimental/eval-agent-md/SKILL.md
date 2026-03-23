@@ -1,22 +1,26 @@
 ---
 name: eval-agent-md
-description: 'Behavioral compliance testing for any CLAUDE.md or agent definition
-  file. Auto-generates test scenarios from your rules, runs them via LLM-as-judge
-  scoring, and reports compliance. Optionally improves failing rules via automated
-  mutation loop.
-
-  '
+description: >-
+  Behavioral compliance testing for any CLAUDE.md or agent definition file.
+  Auto-generates test scenarios from your rules, runs them via LLM-as-judge
+  scoring, and reports a compliance score with per-rule pass/fail breakdown.
+  Optionally improves failing rules via automated mutation loop.
+  Use when: (1) testing whether your CLAUDE.md rules are actually followed,
+  (2) evaluating an agent definition for role-boundary compliance,
+  (3) dogfooding a skill's own SKILL.md.
+  Triggers on: "eval", "compliance test", "test my CLAUDE.md", "check rules",
+  "behavioral test", "/eval-agent-md".
 metadata:
   category: assistant
   tags:
-  - testing
-  - compliance
-  - agent-md
-  - behavioral
-  - meta
-  - quality
+    - testing
+    - compliance
+    - agent-md
+    - behavioral
+    - meta
+    - quality
   status: experimental
-  version: 2
+  version: 3
 ---
 
 # eval-agent-md — Behavioral Compliance Testing
@@ -151,21 +155,16 @@ This is always dry-run by default. Show the user each suggested mutation and ask
 
 ## Arguments
 
-Parse the user's `/eval-agent-md` invocation for these optional arguments:
+Parse the user's `/eval-agent-md` invocation for these common options:
 
 - `[path]` — target file (positional, e.g., `/eval-agent-md ./CLAUDE.md`)
 - `--improve` — run mutation loop after testing
-- `--runs N` — runs per scenario (default: 1)
+- `--runs N` — runs per scenario (default: 1, recommend 3 for reliability)
 - `--model MODEL` — model for test subject (default: sonnet)
-- `--compare-models` — cross-model comparison (haiku/sonnet/opus)
-- `--workers N` — override laptop-safe auto-worker cap
-- `--agent` — hint that the target is an agent definition file (adjusts generation style)
-- `--skill` — hint that the target is a SKILL.md file (focuses scenarios on workflow order, argument contracts, progress reporting)
-- `--self` — auto-resolve to this skill's own SKILL.md for dogfooding (implies `--skill`, ignores path argument)
-- `--no-scenario-cache` — disable exact-input scenario generation cache
-- `--no-cache` — compatibility alias for `--no-scenario-cache` in scenario generation and `--no-judge-cache` in behavioral eval/mutation loop
-- `--no-judge-cache` — disable exact-input judge cache during behavioral eval or mutation loop
-- `--no-subject-cache` — disable exact-input subject response cache during behavioral eval
+- `--self` — test this skill's own SKILL.md (implies `--skill`)
+- `--skill` / `--agent` — hint the target type for better scenario generation
+
+See `references/script-reference.md` for the full flag reference (caching, workers, compare-models, timeouts).
 
 ## Examples
 
@@ -174,12 +173,6 @@ Parse the user's `/eval-agent-md` invocation for these optional arguments:
 User: "Run compliance tests against my CLAUDE.md to check if all rules are being followed."
 
 Expected behavior: Use `eval-agent-md` workflow — locate the CLAUDE.md, generate test scenarios, run behavioral tests, and report compliance results.
-
-### Self-Test (Dogfooding)
-
-User: "/eval-agent-md --self"
-
-Expected behavior: Resolve target to this skill's own SKILL.md, generate workflow-aware scenarios (step ordering, user confirmations, progress reporting, argument handling), run behavioral tests, and report compliance. Optionally improve failing rules via mutation loop.
 
 ### Non-Trigger
 
@@ -207,14 +200,6 @@ Expected behavior: Do not use this skill. Choose a more relevant skill or procee
 - Cause: The skill directory path is not resolving correctly, or scripts lack execute permissions.
 - Solution: Verify the skill is installed at the expected path and run `chmod +x` on the scripts in the `scripts/` directory.
 
-## Notes
+## Reference Guides
 
-- All scripts use `uv run --script` — no pip install needed
-- The judge always uses haiku (cheap, fast, reliable for scoring)
-- Generated scenarios are ephemeral (temp dir) — they adapt to the current file state
-- Scenario generation and subject responses use exact-input caches by default for faster reruns
-- Judge verdicts also use exact-input caching by default; use the explicit `--no-judge-cache` flag to bypass it
-- Auto-workers default to a conservative laptop-safe cap; users can opt into more with `--workers`
-- Mutation-loop scoped checks reuse the already-known baseline and re-evaluate only the mutated candidate before full-suite validation
-- For agent .md files, the generator creates role-boundary scenarios (e.g., "does the reviewer avoid writing code?")
-- Scripts are in this skill's `scripts/` directory
+- **Full script reference**: `references/script-reference.md` — all flags, caching strategy, performance notes
