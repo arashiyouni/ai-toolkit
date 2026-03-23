@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-03-23
+
+- Added real-time progress reporting to workflow.
 ## 2026-03-21
 
 - Added type-system-audit skill and skill scoring script.
