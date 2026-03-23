@@ -77,7 +77,7 @@ Subagents run in their own context. They do their work and return a compact summ
 
 You define them as markdown files under `~/.claude/agents/` (global) or `.claude/agents/` (per-project). Here are four I keep around:
 
-<details>
+<details markdown="1">
 <summary><strong>researcher.md</strong> — looks things up without polluting my context</summary>
 
 ```markdown
@@ -101,7 +101,7 @@ output:
 
 </details>
 
-<details>
+<details markdown="1">
 <summary><strong>verifier.md</strong> — runs the check suite and reports back pass/fail</summary>
 
 ```markdown
@@ -124,7 +124,7 @@ rules:
 
 </details>
 
-<details>
+<details markdown="1">
 <summary><strong>reviewer.md</strong> — read-only code review, catches things I miss</summary>
 
 ```markdown
@@ -155,7 +155,7 @@ summary: total by severity + verdict (ship / fix-then-ship / needs-rework)
 
 </details>
 
-<details>
+<details markdown="1">
 <summary><strong>implementer.md</strong> — writes code in isolation and returns just the diff</summary>
 
 ```markdown
