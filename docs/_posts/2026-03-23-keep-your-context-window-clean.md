@@ -54,7 +54,7 @@ rtk init -g --hook-only
 
 I've been running it for a few weeks. Here's what the savings look like:
 
-![RTK savings dashboard showing 91.3% token efficiency across 9,322 commands](/assets/images/posts/rtk-savings.png)
+![RTK savings dashboard showing 91.3% token efficiency across 9,322 commands]({{ site.baseurl }}/assets/images/posts/rtk-savings.png)
 
 Over 9,000 commands intercepted, 63.7M tokens saved. The biggest wins come from lint output and file listings — stuff that's repetitive and compresses well.
 
@@ -67,7 +67,7 @@ headroom wrap claude
 
 The dashboard at `http://localhost:8787/dashboard` shows compression stats in real time:
 
-![Headroom dashboard showing $1.9k total savings and 2.4M tokens saved](/assets/images/posts/headroom-dashboard.png)
+![Headroom dashboard showing $1.9k total savings and 2.4M tokens saved]({{ site.baseurl }}/assets/images/posts/headroom-dashboard.png)
 
 ## Subagents
 
