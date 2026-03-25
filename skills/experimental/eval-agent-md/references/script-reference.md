@@ -29,6 +29,8 @@ uv run --script [SKILL_DIR]/scripts/generate-scenarios.py [OPTIONS] [TARGET_FILE
 | `--model MODEL` | Model for generation (default: sonnet) |
 | `--no-scenario-cache` | Disable exact-input scenario generation cache |
 | `--no-cache` | Compatibility alias for `--no-scenario-cache` |
+| `--coverage` | Report rule coverage after scenario generation (tested vs untested rules) |
+| `--save-reference PATH` | Save scenarios to a stable reference directory for deterministic test suites |
 
 ### eval-behavioral.py
 
@@ -73,6 +75,8 @@ uv run --script [SKILL_DIR]/scripts/mutate-loop.py \
 | `--no-judge-cache` | Disable judge verdict cache during eval |
 | `--no-subject-cache` | Disable exact-input subject response cache |
 | `--no-cache` | Alias for `--no-judge-cache` |
+| `--neutral-strategy CHOICE` | How to handle delta=0 mutations: `revert` (default), `keep`, or `size` (keep if response is smaller) |
+| `--no-boundary-check` | Skip frontmatter protection, syntax validation, and mutation size checks |
 
 ## Caching Strategy
 
@@ -87,6 +91,16 @@ Three independent caches accelerate repeated runs:
 - All caches are exact-input: changing the target file or scenario invalidates the cache entry automatically
 - Disable individually with `--no-scenario-cache`, `--no-subject-cache`, `--no-judge-cache`
 - Cache files are stored as JSON for inspectability
+
+## Mutation Safety
+
+Three guardrails protect the target file during mutation (disable with `--no-boundary-check`):
+
+| Check | What it does | Rejection reason |
+|-------|-------------|------------------|
+| Frontmatter protection | Rejects mutations targeting YAML frontmatter (between `---` markers) | `frontmatter_unsafe` |
+| Syntax validation | Rejects mutations that would corrupt YAML frontmatter parsing | `syntax_invalid` |
+| Bounded mutations | Rejects mutations where new text is >2x original length or >500 chars larger | `mutation_too_large` |
 
 ## Performance Notes
 

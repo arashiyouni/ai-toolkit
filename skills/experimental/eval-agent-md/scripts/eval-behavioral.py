@@ -17,6 +17,7 @@ Usage:
 import argparse
 import json
 import os
+import re
 import sys
 import threading
 import time
@@ -88,6 +89,56 @@ def is_integration(scenario: dict) -> bool:
     return scenario.get("type") == "integration"
 
 
+def measure_response_size(response: str) -> dict:
+    """Measure response dimensions for multi-dimensional scoring."""
+    return {
+        "char_count": len(response),
+        "word_count": len(response.split()) if response else 0,
+    }
+
+
+def classify_verdict(detail: dict) -> str:
+    """Classify a verdict detail as 'pass', 'fail', or 'error'."""
+    v = detail.get("verdict", "").upper()
+    if v == "ERROR":
+        return "error"
+    if v == "PASS":
+        return "pass"
+    return "fail"
+
+
+def structural_check(response: str, check: dict) -> dict:
+    """Run a single structural check against a response.
+
+    Check types:
+      - starts_with: response must start with pattern (after stripping whitespace)
+      - contains: response must contain the literal pattern
+      - not_contains: response must NOT contain the literal pattern
+      - regex: response must match the regex pattern (multiline search)
+    """
+    check_type = check["type"]
+    pattern = check["pattern"]
+    stripped = response.strip()
+
+    if check_type == "starts_with":
+        passed = stripped.startswith(pattern)
+    elif check_type == "contains":
+        passed = pattern in response
+    elif check_type == "not_contains":
+        passed = pattern not in response
+    elif check_type == "regex":
+        passed = bool(re.search(pattern, response, re.MULTILINE))
+    else:
+        return {"passed": False, "check": check, "reason": f"unknown check type: {check_type}"}
+
+    return {"passed": passed, "check": check}
+
+
+def run_structural_checks(response: str, checks: list[dict]) -> list[dict]:
+    """Run all structural checks and return results."""
+    return [structural_check(response, c) for c in checks]
+
+
 def judge(scenario: dict, response: str, timeout: int = 300, use_cache: bool = True) -> dict:
     # Compute cache key from system prompt, scenario rule/prompt, and response
     cache_key = stable_cache_key("judge", JUDGE_SYSTEM, scenario["rule"], scenario["prompt"], response)
@@ -154,6 +205,7 @@ def get_subject_response(
     run_index: int,
     timeout: int,
     use_cache: bool,
+    retries: int = 1,
 ) -> tuple[str, bool, float]:
     config_hash = file_sha256(system_file)
     cache_key = stable_cache_key(
@@ -173,19 +225,29 @@ def get_subject_response(
                 _cache_stats["subject_hits"] += 1
             return cached["response"], True, 0.0
 
+    last_error: Exception | None = None
     started_at = time.perf_counter()
-    response = claude_pipe(scenario["prompt"], model=model, system_file=system_file, timeout=timeout)
-    elapsed_seconds = time.perf_counter() - started_at
-    if use_cache:
-        write_json_cache(cache_file, {"response": response})
-        with _cache_stats_lock:
-            _cache_stats["subject_misses"] += 1
-    return response, False, elapsed_seconds
+    for attempt in range(retries):
+        try:
+            response = claude_pipe(scenario["prompt"], model=model, system_file=system_file, timeout=timeout)
+            elapsed_seconds = time.perf_counter() - started_at
+            if use_cache:
+                write_json_cache(cache_file, {"response": response})
+                with _cache_stats_lock:
+                    _cache_stats["subject_misses"] += 1
+            return response, False, elapsed_seconds
+        except Exception as exc:
+            last_error = exc
+            if attempt < retries - 1:
+                backoff = 2 ** attempt
+                _tprint(f"  Retry {attempt + 1}/{retries} for {scenario['id']} after {backoff}s: {exc}")
+                time.sleep(backoff)
+    raise last_error  # type: ignore[misc]
 
 
 def run_scenario(model: str, system_file: Path, scenario: dict, runs: int,
                  timeout: int = 300, use_cache: bool = True,
-                 use_subject_cache: bool = True) -> dict:
+                 use_subject_cache: bool = True, retries: int = 1) -> dict:
     effective_file = system_file
     if scenario.get("agent_md"):
         agent_path = Path(scenario["agent_md"]).expanduser()
@@ -198,33 +260,59 @@ def run_scenario(model: str, system_file: Path, scenario: dict, runs: int,
     subject_seconds = 0.0
     judge_seconds = 0.0
     subject_cache_hits = 0
+    response_sizes = []
     for r in range(runs):
-        response, from_cache, response_seconds = get_subject_response(
-            scenario=scenario,
-            model=model,
-            system_file=effective_file,
-            run_index=r + 1,
-            timeout=timeout,
-            use_cache=use_subject_cache,
-        )
+        try:
+            response, from_cache, response_seconds = get_subject_response(
+                scenario=scenario,
+                model=model,
+                system_file=effective_file,
+                run_index=r + 1,
+                timeout=timeout,
+                use_cache=use_subject_cache,
+                retries=retries,
+            )
+        except Exception as exc:
+            verdicts.append({
+                "verdict": "ERROR",
+                "evidence": str(exc)[:200],
+                "triggered_criteria": [],
+                "triggered_fail_signals": [],
+                "full_response": "",
+                "run": r + 1,
+            })
+            continue
+
+        response_sizes.append(measure_response_size(response))
         subject_seconds += response_seconds
         if from_cache:
             subject_cache_hits += 1
         judge_started_at = time.perf_counter()
         result = judge(scenario, response, timeout=timeout, use_cache=use_cache)
         judge_seconds += time.perf_counter() - judge_started_at
-        result["response_preview"] = response[:500]
+        result["full_response"] = response
         result["run"] = r + 1
         verdicts.append(result)
 
-    passes = sum(1 for v in verdicts if v["verdict"] == "PASS")
+    passes = sum(1 for v in verdicts if classify_verdict(v) == "pass")
+    errors = sum(1 for v in verdicts if classify_verdict(v) == "error")
+    fails = sum(1 for v in verdicts if classify_verdict(v) == "fail")
+
+    if errors == runs:
+        final = "ERROR"
+    elif passes > runs / 2:
+        final = "PASS"
+    else:
+        final = "FAIL"
+
     result = {
         "id": scenario["id"],
         "rule": scenario["rule"],
         "runs": runs,
         "passes": passes,
-        "fails": runs - passes,
-        "final_verdict": "PASS" if passes > runs / 2 else "FAIL",
+        "fails": fails,
+        "errors": errors,
+        "final_verdict": final,
         "details": verdicts,
         "timing": {
             "subject_seconds": subject_seconds,
@@ -233,6 +321,10 @@ def run_scenario(model: str, system_file: Path, scenario: dict, runs: int,
         "cache": {
             "subject_hits": subject_cache_hits,
             "subject_misses": runs - subject_cache_hits,
+        },
+        "response_size": {
+            "avg_char_count": sum(s["char_count"] for s in response_sizes) / max(len(response_sizes), 1),
+            "avg_word_count": sum(s["word_count"] for s in response_sizes) / max(len(response_sizes), 1),
         },
     }
     if is_integration(scenario):
@@ -264,9 +356,10 @@ def run_scenarios(scenarios: list[dict], model: str, system_file: Path,
                 _tprint(f"\n[{idx + 1}/{total}] {s['id']}... ERROR: {exc}")
                 r = {
                     "id": s["id"], "rule": s["rule"], "runs": runs,
-                    "passes": 0, "fails": runs, "final_verdict": "FAIL",
+                    "passes": 0, "fails": 0, "errors": runs, "final_verdict": "ERROR",
                     "details": [{"verdict": "ERROR", "evidence": str(exc)[:200], "run": j + 1,
-                                 "triggered_criteria": [], "triggered_fail_signals": []}
+                                 "triggered_criteria": [], "triggered_fail_signals": [],
+                                 "full_response": ""}
                                 for j in range(runs)],
                 }
                 if is_integration(s):
@@ -284,6 +377,12 @@ def run_scenarios(scenarios: list[dict], model: str, system_file: Path,
         "subject_cache_misses": sum(r.get("cache", {}).get("subject_misses", 0) for r in results_by_index.values()),
         "judge_cache_hits": _cache_stats["judge_hits"],
         "judge_cache_misses": _cache_stats["judge_misses"],
+        "avg_response_chars": sum(
+            r.get("response_size", {}).get("avg_char_count", 0.0) for r in results_by_index.values()
+        ) / max(len(results_by_index), 1),
+        "avg_response_words": sum(
+            r.get("response_size", {}).get("avg_word_count", 0.0) for r in results_by_index.values()
+        ) / max(len(results_by_index), 1),
     }
 
     return [results_by_index[i] for i in range(total)], metrics
@@ -295,14 +394,20 @@ def _print_result_group(results: list[dict], group_label: str | None = None):
         print(f"\n  --- {group_label} ---")
     total = len(results)
     passed = sum(1 for r in results if r["final_verdict"] == "PASS")
+    errored = sum(1 for r in results if r["final_verdict"] == "ERROR")
+    failed = total - passed - errored
     for r in results:
-        icon = "PASS" if r["final_verdict"] == "PASS" else "FAIL"
+        icon = r["final_verdict"]
         votes = f"{r['passes']}/{r['runs']}"
-        print(f"  [{icon}] {r['id']:<25} ({r['rule']:<20}) votes: {votes}")
+        errors_str = f" errors={r.get('errors', 0)}" if r.get("errors") else ""
+        print(f"  [{icon}] {r['id']:<25} ({r['rule']:<20}) votes: {votes}{errors_str}")
         for d in r["details"]:
             print(f"         run {d['run']}: {d['verdict']} — {d.get('evidence', 'no evidence')}")
     if total > 0:
-        print(f"  {group_label or 'Score'}: {passed}/{total} ({passed / total * 100:.0f}%)")
+        parts = [f"passed={passed}", f"failed={failed}"]
+        if errored:
+            parts.append(f"errored={errored}")
+        print(f"  {group_label or 'Score'}: {passed}/{total} ({passed / total * 100:.0f}%) [{', '.join(parts)}]")
     return passed, total
 
 
@@ -318,19 +423,30 @@ def print_results(results: list[dict], label: str = "", metrics: dict | None = N
     total = len(results)
     passed = sum(1 for r in results if r["final_verdict"] == "PASS")
 
+    errored = sum(1 for r in results if r["final_verdict"] == "ERROR")
+    failed = total - passed - errored
+
     if integration:
         pr_passed, pr_total = _print_result_group(per_rule, "Per-rule")
         int_passed, int_total = _print_result_group(integration, "Integration")
+        parts = [f"passed={passed}", f"failed={failed}"]
+        if errored:
+            parts.append(f"errored={errored}")
         print(f"\n  Combined: {passed}/{total} ({passed / total * 100:.0f}%)"
-              f"  [per-rule: {pr_passed}/{pr_total}, integration: {int_passed}/{int_total}]")
+              f"  [per-rule: {pr_passed}/{pr_total}, integration: {int_passed}/{int_total}]"
+              f"  [{', '.join(parts)}]")
     else:
         for r in results:
-            icon = "PASS" if r["final_verdict"] == "PASS" else "FAIL"
+            icon = r["final_verdict"]
             votes = f"{r['passes']}/{r['runs']}"
-            print(f"  [{icon}] {r['id']:<25} ({r['rule']:<20}) votes: {votes}")
+            errors_str = f" errors={r.get('errors', 0)}" if r.get("errors") else ""
+            print(f"  [{icon}] {r['id']:<25} ({r['rule']:<20}) votes: {votes}{errors_str}")
             for d in r["details"]:
                 print(f"         run {d['run']}: {d['verdict']} — {d.get('evidence', 'no evidence')}")
-        print(f"\n  Score: {passed}/{total} ({passed / total * 100:.0f}%)")
+        parts = [f"passed={passed}", f"failed={failed}"]
+        if errored:
+            parts.append(f"errored={errored}")
+        print(f"\n  Score: {passed}/{total} ({passed / total * 100:.0f}%) [{', '.join(parts)}]")
 
     if metrics:
         print(
@@ -344,6 +460,12 @@ def print_results(results: list[dict], label: str = "", metrics: dict | None = N
             f" subject={metrics['subject_cache_hits']} hits/{metrics['subject_cache_misses']} misses"
             f" judge={metrics['judge_cache_hits']} hits/{metrics['judge_cache_misses']} misses"
         )
+        if "avg_response_chars" in metrics:
+            print(
+                "  Response size:"
+                f" avg_chars={metrics['avg_response_chars']:.0f}"
+                f" avg_words={metrics['avg_response_words']:.0f}"
+            )
     return passed, total
 
 
@@ -359,6 +481,8 @@ def save_results(results: list[dict], model: str, label: str = "", metrics: dict
         "summary": {
             "total": len(results),
             "passed": sum(1 for r in results if r["final_verdict"] == "PASS"),
+            "failed": sum(1 for r in results if r["final_verdict"] == "FAIL"),
+            "errored": sum(1 for r in results if r["final_verdict"] == "ERROR"),
         },
     }
     path = RESULTS_DIR / f"eval-{ts}.json"
@@ -390,6 +514,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-cache", action="store_true", dest="no_judge_cache",
                         help="Alias for --no-judge-cache")
     parser.add_argument("--no-subject-cache", action="store_true", help="Disable exact-input subject response cache")
+    parser.add_argument("--retries", type=int, default=1, help="Retry transient errors N times per subject call (default: 1, no retry)")
     return parser
 
 

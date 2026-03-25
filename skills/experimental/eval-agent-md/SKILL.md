@@ -17,7 +17,7 @@ metadata:
   - meta
   - quality
   status: experimental
-  version: 5
+  version: 6
 ---
 
 # eval-agent-md — Behavioral Compliance Testing
@@ -114,6 +114,8 @@ Options the user can control:
 - `--no-judge-cache` — force fresh judge verdicts instead of reusing exact-input cache entries
 - `--no-subject-cache` — force fresh subject responses instead of exact-input cache reuse
 
+Results now include multi-dimensional metrics: per-scenario response size (char count, word count) alongside timing and cache stats. This enables better A/B comparison during mutation testing.
+
 ### Step 4: Report results
 
 Print a compliance report:
@@ -162,6 +164,20 @@ uv run --script [SKILL_DIR]/scripts/mutate-loop.py \
 
 This is always dry-run by default. Show the user each suggested mutation and ask before applying.
 
+#### Mutation Safety
+
+The mutation loop includes three safety guardrails (disable with `--no-boundary-check`):
+- **Frontmatter protection** — rejects mutations that target YAML frontmatter (between `---` markers)
+- **Syntax validation** — rejects mutations that would corrupt YAML frontmatter parsing
+- **Bounded mutations** — rejects mutations where the replacement text is >2x the original or >500 chars larger
+
+#### Neutral Tiebreak Strategy
+
+When a mutation produces delta=0 (equal correctness), the `--neutral-strategy` flag controls the decision:
+- `revert` (default) — discard neutral mutations
+- `keep` — keep neutral mutations
+- `size` — keep only if the mutated response is shorter (efficiency win)
+
 ## Arguments
 
 Parse the user's `/eval-agent-md` invocation for these common options:
@@ -173,6 +189,8 @@ Parse the user's `/eval-agent-md` invocation for these common options:
 - `--self` — test this skill's own SKILL.md (implies `--skill`)
 - `--skill` / `--agent` — hint the target type for better scenario generation
 - `--holistic` — also generate integration scenarios that test multiple rules interacting (priority ordering, conflict resolution, cumulative compliance)
+- `--coverage` — report rule coverage after scenario generation (shows tested vs untested rules)
+- `--save-reference PATH` — save scenarios to a stable reference directory for deterministic test suites
 
 See `references/script-reference.md` for the full flag reference (caching, workers, compare-models, timeouts).
 

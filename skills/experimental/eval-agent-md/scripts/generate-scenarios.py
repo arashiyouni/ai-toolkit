@@ -13,6 +13,7 @@ Usage:
     ./generate-scenarios.py ~/.claude/agents/reviewer.md --agent
 """
 import argparse
+import re
 import subprocess
 import sys
 import time
@@ -39,6 +40,42 @@ SKILL_CONTEXT = load_prompt("context-skill.md")
 RESULTS_DIR = Path(__file__).parent / "results"
 SCENARIO_CACHE_DIR = RESULTS_DIR / "scenario_cache"
 
+# Sections that are structural, not rules
+_NON_RULE_SECTIONS = {
+    "examples", "troubleshooting", "reference guides", "references",
+    "arguments", "what this does", "workflow", "script execution",
+    "progress reporting", "step 1", "step 2", "step 3", "step 4", "step 5",
+    "positive trigger", "non-trigger", "more information",
+}
+
+
+def extract_rule_names(content: str) -> list[str]:
+    """Extract rule/section names from markdown H2 headings, skipping structural sections."""
+    rules = []
+    for match in re.finditer(r"^##\s+(.+)$", content, re.MULTILINE):
+        name = match.group(1).strip()
+        if name.lower() not in _NON_RULE_SECTIONS:
+            rules.append(name)
+    return rules
+
+
+def compute_coverage(rules: list[str], scenarios: list[dict]) -> dict:
+    """Compute which extracted rules are covered by scenarios."""
+    tested_rules = set()
+    for s in scenarios:
+        rule = s.get("rule", "")
+        for r in rules:
+            if r.lower() in rule.lower() or rule.lower() in r.lower():
+                tested_rules.add(r)
+    untested = [r for r in rules if r not in tested_rules]
+    coverage_pct = (len(tested_rules) / len(rules) * 100) if rules else 100.0
+    return {
+        "rules_found": len(rules),
+        "rules_tested": len(tested_rules),
+        "coverage_pct": coverage_pct,
+        "untested": untested,
+    }
+
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Generate behavioral test scenarios from CLAUDE.md")
@@ -55,6 +92,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
                         help="Alias for --no-scenario-cache")
     parser.add_argument("--holistic", action="store_true",
                         help="Also generate integration scenarios that test multiple rules interacting")
+    parser.add_argument("--coverage", action="store_true",
+                        help="Report rule coverage after scenario generation")
+    parser.add_argument("--save-reference", type=Path, default=None,
+                        help="Save scenarios to a stable reference directory (for deterministic test suites)")
     return parser
 
 
@@ -305,6 +346,14 @@ def main():
         )
         scenarios.extend(integration)
 
+    if args.coverage:
+        content = args.config.read_text()
+        rules = extract_rule_names(content)
+        cov = compute_coverage(rules, scenarios)
+        print(f"Coverage: {cov['rules_tested']}/{cov['rules_found']} rules ({cov['coverage_pct']:.0f}%)", file=sys.stderr)
+        if cov['untested']:
+            print(f"  Untested: {', '.join(cov['untested'])}", file=sys.stderr)
+
     chunks = []
     for s in scenarios:
         chunks.append(yaml.dump([s], default_flow_style=False, allow_unicode=True, sort_keys=False).rstrip())
@@ -318,6 +367,12 @@ def main():
 
     out_path.write_text(output)
     print(f"Saved to {out_path}", file=sys.stderr)
+
+    if args.save_reference:
+        args.save_reference.mkdir(parents=True, exist_ok=True)
+        ref_path = args.save_reference / out_path.name
+        ref_path.write_text(output)
+        print(f"Reference saved to {ref_path}", file=sys.stderr)
 
 
 if __name__ == "__main__":

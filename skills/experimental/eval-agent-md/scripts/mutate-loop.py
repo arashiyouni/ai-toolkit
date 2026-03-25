@@ -176,6 +176,62 @@ def _print_summary_table(iteration_log: list[dict]) -> None:
         print(f"  {e['iteration']:>4}  {e['target']:<24} {delta_str:>6}  {e['result']:<10} {desc}")
 
 
+def is_frontmatter_safe(old_text: str, content: str) -> bool:
+    """Return False if old_text falls within YAML frontmatter."""
+    if not content.startswith("---"):
+        return True
+    end = content.find("\n---", 3)
+    if end == -1:
+        return True
+    frontmatter_end = end + 4  # include the closing ---\n
+    pos = content.find(old_text)
+    if pos == -1:
+        return True
+    return pos >= frontmatter_end
+
+
+def validate_post_mutation(content: str) -> bool:
+    """Validate YAML frontmatter is still parseable after mutation."""
+    if not content.startswith("---"):
+        return True
+    end = content.find("\n---", 3)
+    if end == -1:
+        return True
+    frontmatter = content[4:end]  # skip opening ---\n
+    try:
+        yaml.safe_load(frontmatter)
+        return True
+    except yaml.YAMLError:
+        return False
+
+
+def is_mutation_bounded(old_text: str, new_text: str, max_pct: float = 2.0, max_chars: int = 500) -> bool:
+    """Return True if mutation is bounded (not a complete rewrite)."""
+    if not old_text:
+        return len(new_text) <= max_chars
+    size_ratio = len(new_text) / len(old_text)
+    abs_change = abs(len(new_text) - len(old_text))
+    return size_ratio <= max_pct and abs_change <= max_chars
+
+
+def decide_mutation(delta: int, baseline_size: int, mutated_size: int, strategy: str) -> str:
+    """Decide mutation outcome with configurable neutral tiebreak.
+
+    strategy: 'revert' (default), 'keep', or 'size' (keep if smaller response)
+    Returns: 'keep', 'revert', 'neutral_keep', or 'neutral_revert'
+    """
+    if delta > 0:
+        return "keep"
+    if delta < 0:
+        return "revert"
+    # delta == 0: neutral
+    if strategy == "keep":
+        return "neutral_keep"
+    if strategy == "size":
+        return "neutral_keep" if mutated_size < baseline_size else "neutral_revert"
+    return "neutral_revert"
+
+
 def apply_mutation(config_content: str, mutation: dict) -> str | None:
     old_text = mutation.get("old_text", "")
     new_text = mutation.get("new_text", "")
@@ -199,6 +255,10 @@ def main():
     parser.add_argument("--no-cache", action="store_true", dest="no_judge_cache",
                         help="Alias for --no-judge-cache")
     parser.add_argument("--no-subject-cache", action="store_true", help="Disable exact-input subject response cache")
+    parser.add_argument("--neutral-strategy", choices=["revert", "keep", "size"],
+                        default="revert", help="How to handle neutral (delta=0) mutations: revert (default), keep, or size (keep if response is smaller)")
+    parser.add_argument("--no-boundary-check", action="store_true",
+                        help="Skip frontmatter and mutation size validation")
 
     args = parser.parse_args()
     RESULTS_DIR.mkdir(exist_ok=True)
@@ -287,6 +347,29 @@ def main():
             failing = failing[1:]
             continue
 
+        if not args.no_boundary_check:
+            if not is_frontmatter_safe(mutation.get("old_text", ""), current_content):
+                print("  Mutation targets frontmatter — rejecting for safety.")
+                stats["failed"] += 1
+                iteration_log.append({"iteration": i, "target": target_scenario["id"],
+                                      "result": "frontmatter_unsafe", "mutation": mutation})
+                failing = failing[1:]
+                continue
+            if not validate_post_mutation(mutated_content):
+                print("  Mutation would corrupt YAML frontmatter — rejecting.")
+                stats["failed"] += 1
+                iteration_log.append({"iteration": i, "target": target_scenario["id"],
+                                      "result": "syntax_invalid", "mutation": mutation})
+                failing = failing[1:]
+                continue
+            if not is_mutation_bounded(mutation.get("old_text", ""), mutation.get("new_text", "")):
+                print(f"  Mutation too large ({len(mutation.get('new_text', ''))} chars) — rejecting.")
+                stats["failed"] += 1
+                iteration_log.append({"iteration": i, "target": target_scenario["id"],
+                                      "result": "mutation_too_large", "mutation": mutation})
+                failing = failing[1:]
+                continue
+
         with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
             f.write(mutated_content)
             mutated_path = Path(f.name)
@@ -309,19 +392,31 @@ def main():
             delta = delta_for_scenario(baseline_results, mutated_results, target_scenario["id"])
             print(f"  Delta: {delta:+d}")
 
+            decision = decide_mutation(delta, baseline_size=0, mutated_size=0, strategy=args.neutral_strategy)
+
+            # Map decision to result for logging
+            result_map = {
+                "keep": "keep",
+                "neutral_keep": "neutral",
+                "revert": "revert",
+                "neutral_revert": "neutral",
+            }
             entry = {
                 "iteration": i,
                 "target": target_scenario["id"],
                 "mutation": mutation,
                 "delta": delta,
-                "result": "keep" if delta > 0 else ("neutral" if delta == 0 else "revert"),
+                "result": result_map.get(decision, "unknown"),
             }
             iteration_log.append(entry)
 
-            if delta > 0:
-                stats["kept"] += 1
+            if decision in ("keep", "neutral_keep"):
+                if decision == "keep":
+                    stats["kept"] += 1
+                else:
+                    stats["neutral"] += 1
                 any_mutations_kept = True
-                print(f"  KEEP — delta: {delta:+d}")
+                print(f"  KEEP — delta: {delta:+d} ({decision})")
                 if args.apply:
                     args.target.write_text(mutated_content)
                     current_content = mutated_content
@@ -334,17 +429,18 @@ def main():
                         if existing.get("id") == updated_scenario.get("id"):
                             baseline_results["scenarios"][idx] = updated_scenario
                             break
-            elif delta == 0:
-                stats["neutral"] += 1
-                print("  NEUTRAL — delta: 0 (not keeping)")
             else:
-                stats["reverted"] += 1
-                print(f"  REVERT — delta: {delta:+d}")
+                if decision == "neutral_revert":
+                    stats["neutral"] += 1
+                    print("  NEUTRAL — delta: 0 (not keeping)")
+                else:
+                    stats["reverted"] += 1
+                    print(f"  REVERT — delta: {delta:+d}")
             _progress(i, args.max_iterations, target_scenario["id"], "done", t_start, stats)
         finally:
             mutated_path.unlink(missing_ok=True)
 
-        if args.apply and delta > 0:
+        if args.apply and decision in ("keep", "neutral_keep"):
             _progress(i, args.max_iterations, target_scenario["id"], "full-suite validation", t_start, stats)
             print("  Full-suite validation (catch regressions)...", flush=True)
             reeval = run_eval(
