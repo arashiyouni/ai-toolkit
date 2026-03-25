@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-03-25
+
+- Refactored flatten skill hierarchy from 6 tiers to 8 role-based dirs. (#18)
+- Added --holistic integration scenarios for multi-rule testing.
+## 2026-03-23
+
+- Improved skill quality with progressive disclosure and convention fixes.
+- Used uv run --script in SKILL.md invocation examples.
+- Added real-time progress reporting to workflow.
+## 2026-03-21
+
+- Added type-system-audit skill and skill scoring script.
+## 2026-03-10
+
+- Added localize-ios skill. (#15)
+- Added pr comments address skill. (#14)
 ## 2026-03-03
 
 - Added tech-android skill with 28 rules. (#4)
