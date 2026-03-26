@@ -328,7 +328,7 @@
         "gh-cli"
       ],
       "status": "ready",
-      "version": 1
+      "version": 2
     },
     {
       "name": "localize-ios",
@@ -437,7 +437,7 @@
         "quality"
       ],
       "status": "ready",
-      "version": 7
+      "version": 11
     },
     {
       "name": "tech-prisma",
