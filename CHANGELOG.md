@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-03-27
+
+- Added grill-me skill. (#17)
+- Added upgrade to v4 with 5 new rules, references, and self-check workflow. (#20)
 ## 2026-03-25
 
 - Refactored flatten skill hierarchy from 6 tiers to 8 role-based dirs. (#18)
