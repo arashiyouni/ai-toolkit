@@ -6,7 +6,7 @@ description: 'Set up and enforce a strict, production-grade ESLint configuration
   linting errors, clean up code style, or add type-aware linting. Trigger on: "lint",
   "eslint", "code quality", "static analysis", "strict linting", "make it stricter",
   "make the code stricter", "add better rules", "clean up the codebase", "enforce
-  standards", or "fix all the warnings". Handles detection, config generation, dependency
+  standards", "fix all the warnings", or "ShadCN lint errors". Handles detection, config generation, dependency
   installation, auto-fix, and manual remediation. Do NOT use for Biome or Rome projects,
   Prettier-only formatting, non-TypeScript/JavaScript projects, writing custom ESLint
   rules or plugins, husky/lint-staged/pre-commit hook setup, or when the user just
@@ -51,8 +51,8 @@ undo — proceed carefully, fix in small batches.
 
 1. **Detect** the project type by running `scripts/detect-project.sh`
 2. **Generate** a tailored `eslint.config.mjs` from `references/eslint-config-reference.mjs`
-3. **Validate** the config actually loads before proceeding
-4. **Install** all required dependencies using `scripts/generate-install-cmd.sh`
+3. **Install** all required dependencies using `scripts/generate-install-cmd.sh`
+4. **Validate** the config actually loads before proceeding
 5. **Auto-fix** using `eslint --fix` in batches
 6. **Baseline** — capture error counts before manual fixes begin
 7. **Manually fix** every remaining issue, verifying after each batch
@@ -102,6 +102,7 @@ Based on the results, determine which config sections to include:
 | `playwright` or `@playwright/test` in devDeps | Playwright |
 | `@testing-library/react` in devDeps | Testing Library |
 | `server/`, `api/`, or backend directories | Node.js backend |
+| `components.json` + `@radix-ui/*` in deps | ShadCN UI overrides |
 | Monorepo (`apps/`, `packages/`, workspaces) | Per-app overrides |
 
 If a signal is absent, omit that entire section. Do not include commented-out blocks.
@@ -141,7 +142,8 @@ Every config MUST include these core sections (framework-agnostic):
 - `eslint-config-prettier` as the LAST entry (disables formatting rules)
 
 Adapt file globs to match the actual project structure (e.g., `src/server/` instead of
-`server/`). The detection output includes discovered globs — use them.
+`server/`). The detection output includes discovered globs in the `globs` field — replace
+the placeholder globs in the reference config with those values.
 
 If the project already has an ESLint config, read it first. Do not blindly overwrite —
 merge the new rules into the existing structure. If it's `.eslintrc.*` (legacy format),
@@ -151,27 +153,7 @@ project-specific rules. Show the user a diff.
 
 ---
 
-## Step 3: Validate the Config
-
-After writing the config, immediately verify it loads. Find any `.ts` or `.tsx` file in the
-project to test against — do not assume `src/index.ts` exists:
-
-```bash
-TEST_FILE=$(find src apps packages lib . -maxdepth 4 \( -name '*.ts' -o -name '*.tsx' \) 2>/dev/null | grep -v node_modules | head -1)
-if [[ -z "$TEST_FILE" ]]; then
-  echo "No .ts/.tsx files found to test config against"
-  exit 1
-fi
-npx eslint --print-config "$TEST_FILE" > /dev/null 2>&1
-echo $?
-```
-
-Exit 0 = config loaded. Exit 2 = config/parse error. Do not proceed to auto-fix with a
-broken config. See the Troubleshooting section for common config failures.
-
----
-
-## Step 4: Install Dependencies
+## Step 3: Install Dependencies
 
 Run the install command generator:
 
@@ -198,6 +180,29 @@ Conditional packages: `eslint-plugin-react` + `eslint-plugin-react-hooks` +
 (Playwright), `eslint-plugin-testing-library` (Testing Library).
 
 Install as devDependencies. Show the user what was added.
+
+---
+
+## Step 4: Validate the Config
+
+After installing dependencies, verify the config loads. Find any `.ts`, `.tsx`, `.js`,
+or `.jsx` file in the project to test against — do not assume `src/index.ts` exists:
+
+```bash
+TEST_FILE=$(find src apps packages lib . -maxdepth 4 \( -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.jsx' \) 2>/dev/null | grep -v node_modules | head -1)
+if [[ -z "$TEST_FILE" ]]; then
+  TEST_FILE="eslint.config.mjs"
+fi
+npx eslint --print-config "$TEST_FILE" > /dev/null 2>&1
+echo $?
+```
+
+Exit 0 = config loaded. Exit 2 = config/parse error. Do not proceed to auto-fix with a
+broken config. See the Troubleshooting section for common config failures.
+
+**Package manager note:** Replace `npx` with `bunx` (Bun) or `yarn exec` (Yarn PnP) if
+your project uses a different package manager. The detection output's `packageManager`
+field tells you which one to use.
 
 ---
 
@@ -378,13 +383,14 @@ fi
 ```
 
 When Claude Code is detected, read `references/claude-code-integration.md` and execute the
-full setup without prompting the user. This includes:
+setup automatically. This includes:
 
-- TypeScript LSP plugin installation (`/plugin install typescript-lsp@claude-plugins-official`)
-- PostToolUse hook (per-file lint via `scripts/lint-typecheck-hook.sh`)
-- Stop hook (full project lint + typecheck)
-- Self-test validation (`scripts/validate-setup.sh`)
+- PostToolUse hook (per-file lint via `scripts/lint-typecheck-hook.sh`) — automatic
+- Stop hook (full project lint + typecheck) — automatic
+- Self-test validation (`scripts/validate-setup.sh`) — automatic
 - Hook reliability details (circuit breaker, graceful degradation, output truncation)
+- TypeScript LSP plugin — **requires user action**: tell the user to run
+  `/plugin install typescript-lsp@claude-plugins-official` in their Claude Code session
 
 After installation, inform the user what was set up and how to remove it:
 
@@ -481,10 +487,11 @@ renames 7 files to kebab-case in a separate batch, verifies clean.
 | File | Purpose | When to use |
 |---|---|---|
 | `scripts/detect-project.sh` | Parses package.json with Node.js, outputs JSON with module flags, commands, globs | Step 1 (detection) |
-| `scripts/generate-install-cmd.sh` | Takes detection JSON, outputs categorized install command | Step 4 (install) |
+| `scripts/generate-install-cmd.sh` | Takes detection JSON, outputs categorized install command | Step 3 (install) |
 | `scripts/categorize-errors.js` | Groups ESLint JSON output by rule, shows fix priority (Node.js, no Python needed) | Step 5 (after auto-fix) |
 | `scripts/lint-typecheck-hook.sh` | Claude Code PostToolUse hook with circuit breaker | Step 9 (Claude Code only) |
-| `scripts/validate-setup.sh` | Runs 19 checks to verify the entire setup works | Step 9 (after hook setup) |
+| `scripts/validate-setup.sh` | Runs checks to verify the entire setup works | Step 9 (after hook setup) |
+| `scripts/test-detect-project.sh` | Test suite for detect-project.sh with fixture directories | Development / CI |
 | `references/eslint-config-reference.mjs` | Full ESLint config template with all sections | Step 2 (config generation) |
 | `references/claude-code-settings.json` | Template `.claude/settings.json` with hook config | Step 9 (Claude Code only) |
 | `references/claude-code-integration.md` | Full Claude Code setup guide (LSP, hooks, self-test) | Step 9 (Claude Code only) |

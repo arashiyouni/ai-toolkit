@@ -46,25 +46,34 @@ fi
 echo ""
 
 # -----------------------------------------------------------
-# 2. Dependencies installed
+# 2. Detect package runner (supports npx, bunx, yarn PnP)
 # -----------------------------------------------------------
-echo "📦 Dependencies"
+echo "📦 Package runner"
 
-if [[ -d "node_modules" ]]; then
-  pass "node_modules exists"
-else
-  fail "node_modules missing — run your package manager install first"
+RUNNER=""
+if [[ -f "bun.lockb" ]] || [[ -f "bun.lock" ]]; then
+  command -v bunx &>/dev/null && RUNNER="bunx"
+elif [[ -f ".pnp.cjs" ]] || [[ -f ".pnp.js" ]]; then
+  command -v yarn &>/dev/null && RUNNER="yarn exec"
+fi
+if [[ -z "$RUNNER" ]]; then
+  command -v npx &>/dev/null && RUNNER="npx"
 fi
 
-# Check core ESLint packages
-core_pkgs=("eslint" "typescript-eslint" "eslint-plugin-unicorn" "eslint-plugin-sonarjs")
-for pkg in "${core_pkgs[@]}"; do
-  if [[ -d "node_modules/$pkg" ]]; then
-    pass "$pkg installed"
+if [[ -n "$RUNNER" ]]; then
+  pass "Package runner detected: $RUNNER"
+else
+  fail "No package runner found (npx, bunx, or yarn)"
+fi
+
+# Check dependencies are available (PM-agnostic: test via runner, not node_modules)
+if [[ -n "$RUNNER" ]]; then
+  if $RUNNER eslint --version &>/dev/null; then
+    pass "eslint is resolvable"
   else
-    fail "$pkg missing"
+    fail "eslint is not resolvable — run your package manager install first"
   fi
-done
+fi
 
 echo ""
 
@@ -73,24 +82,33 @@ echo ""
 # -----------------------------------------------------------
 echo "🔧 ESLint smoke test"
 
-eslint_version=$(npx eslint --version 2>&1)
-if [[ $? -eq 0 ]]; then
-  pass "ESLint runs (${eslint_version})"
+if [[ -n "$RUNNER" ]]; then
+  eslint_version=$($RUNNER eslint --version 2>&1)
+  if [[ $? -eq 0 ]]; then
+    pass "ESLint runs (${eslint_version})"
+  else
+    fail "ESLint crashes on --version: $eslint_version"
+  fi
 else
-  fail "ESLint crashes on --version: $eslint_version"
+  fail "Skipping ESLint smoke test (no runner)"
 fi
 
-# Find a real .ts or .tsx file to test against
+# Find a real .ts, .tsx, .js, or .jsx file to test against
 test_file=""
-for candidate in $(find src apps packages lib -maxdepth 4 \( -name '*.ts' -o -name '*.tsx' \) 2>/dev/null | grep -v node_modules | head -5); do
+for candidate in $(find src apps packages lib . -maxdepth 4 \( -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.jsx' \) 2>/dev/null | grep -v node_modules | head -5); do
   if [[ -f "$candidate" ]] && [[ ! "$candidate" =~ node_modules ]]; then
     test_file="$candidate"
     break
   fi
 done
 
-if [[ -n "$test_file" ]]; then
-  config_check=$(npx eslint "$test_file" --no-error-on-unmatched-pattern 2>&1)
+# Fall back to eslint.config.mjs itself if no source files found
+if [[ -z "$test_file" ]] && [[ -f "eslint.config.mjs" ]]; then
+  test_file="eslint.config.mjs"
+fi
+
+if [[ -n "$test_file" ]] && [[ -n "$RUNNER" ]]; then
+  config_check=$($RUNNER eslint "$test_file" --no-error-on-unmatched-pattern 2>&1)
   eslint_exit=$?
   if [[ $eslint_exit -le 1 ]]; then
     # exit 0 = clean, exit 1 = lint errors (config loaded fine)
@@ -100,7 +118,7 @@ if [[ -n "$test_file" ]]; then
     fail "ESLint config fails to load: $(echo "$config_check" | head -5)"
   fi
 else
-  warn "No .ts/.tsx files found to test config against"
+  warn "No source files found to test config against"
 fi
 
 echo ""
@@ -110,20 +128,24 @@ echo ""
 # -----------------------------------------------------------
 echo "🔍 TypeScript"
 
-tsc_version=$(npx tsc --version 2>&1)
-if [[ $? -eq 0 ]]; then
-  pass "TypeScript compiler available ($tsc_version)"
-else
-  fail "TypeScript compiler not found"
-fi
+if [[ -n "$RUNNER" ]]; then
+  tsc_version=$($RUNNER tsc --version 2>&1)
+  if [[ $? -eq 0 ]]; then
+    pass "TypeScript compiler available ($tsc_version)"
+  else
+    fail "TypeScript compiler not found"
+  fi
 
-tsc_check=$(npx tsc --noEmit 2>&1)
-tsc_exit=$?
-if [[ $tsc_exit -eq 0 ]]; then
-  pass "TypeScript compiles clean"
+  tsc_check=$($RUNNER tsc --noEmit 2>&1)
+  tsc_exit=$?
+  if [[ $tsc_exit -eq 0 ]]; then
+    pass "TypeScript compiles clean"
+  else
+    error_count=$(echo "$tsc_check" | grep -c "error TS" || true)
+    warn "TypeScript has $error_count type errors (expected if linter was just added)"
+  fi
 else
-  error_count=$(echo "$tsc_check" | grep -c "error TS" || true)
-  warn "TypeScript has $error_count type errors (expected if linter was just added)"
+  fail "Skipping TypeScript check (no runner)"
 fi
 
 echo ""

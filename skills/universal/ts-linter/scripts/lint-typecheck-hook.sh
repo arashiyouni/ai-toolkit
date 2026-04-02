@@ -21,12 +21,21 @@ if [[ -z "$input" ]]; then
   exit 0
 fi
 
-# --- Extract file_path without jq ---
+# --- Extract file_path and cwd without jq ---
 # Works for Edit, Write, MultiEdit — all put file_path in tool_input.
 # Handles both "file_path": "/abs/path" and "file_path": "rel/path".
 file_path=""
 if [[ "$input" =~ \"file_path\"[[:space:]]*:[[:space:]]*\"([^\"]+)\" ]]; then
   file_path="${BASH_REMATCH[1]}"
+fi
+
+# Extract cwd from payload and cd into it for lockfile/runner detection
+hook_cwd=""
+if [[ "$input" =~ \"cwd\"[[:space:]]*:[[:space:]]*\"([^\"]+)\" ]]; then
+  hook_cwd="${BASH_REMATCH[1]}"
+fi
+if [[ -n "$hook_cwd" ]] && [[ -d "$hook_cwd" ]]; then
+  cd "$hook_cwd" || true
 fi
 
 # --- Early exits ---

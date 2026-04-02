@@ -40,7 +40,7 @@ values directly:
 bash <skill-path>/scripts/detect-project.sh . | node -e "
   let d=''; process.stdin.on('data',c=>d+=c); process.stdin.on('end',()=>{
     const o=JSON.parse(d);
-    console.log('LINT_CMD:', o.detectedCommands.lint || 'npx eslint . --quiet');
+    console.log('LINT_CMD:', o.detectedCommands.lint || 'npx eslint . --max-warnings=0');
     console.log('TSC_CMD:', o.detectedCommands.typecheck || 'npx tsc --noEmit');
     console.log('TEST_CMD:', o.detectedCommands.test || '(none)');
   });
@@ -127,7 +127,7 @@ Replace `<LINT_CMD>` and `<TSC_CMD>` with the actual detected commands. Examples
   `"command": "npm run lint 2>&1 | head -50 && npm run typecheck 2>&1 | head -50"`
 
 - Nothing detected (fallback):
-  `"command": "npx eslint . --quiet 2>&1 | head -30 && npx tsc --noEmit 2>&1 | head -30"`
+  `"command": "npx eslint . --max-warnings=0 2>&1 | head -30 && npx tsc --noEmit 2>&1 | head -30"`
 
 If `.claude/settings.json` already exists, merge the `hooks` key into it. Do not overwrite
 existing settings.
