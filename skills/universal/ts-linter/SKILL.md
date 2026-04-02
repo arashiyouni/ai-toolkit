@@ -23,7 +23,7 @@ metadata:
   - code-quality
   - static-analysis
   status: ready
-  version: 5
+  version: 6
 ---
 
 # TypeScript Linter Skill
@@ -57,9 +57,11 @@ undo — proceed carefully, fix in small batches.
 6. **Baseline** — capture error counts before manual fixes begin
 7. **Manually fix** every remaining issue, verifying after each batch
 8. **Verify** and produce a before/after summary comparing against baseline
-9. *(Optional, Claude Code only)* Set up hooks — see `references/claude-code-integration.md`
+9. **Install Claude Code hooks** (Claude Code only — auto-detect environment)
 
 Steps 1-8 are platform-agnostic and work identically on Claude.ai, Claude Code, and the API.
+Step 9 runs automatically when inside Claude Code (detected by the presence of a `.claude/`
+directory) and is silently skipped otherwise.
 This skill only handles ESLint for TypeScript/JavaScript. It does not conflict with other
 skills (e.g., frontend-design, docx) since it only activates for linting-related requests.
 
@@ -103,6 +105,20 @@ Based on the results, determine which config sections to include:
 | Monorepo (`apps/`, `packages/`, workspaces) | Per-app overrides |
 
 If a signal is absent, omit that entire section. Do not include commented-out blocks.
+
+### CI Command Detection
+
+Also check for CI configuration files to discover the exact lint/typecheck/test commands
+that CI runs. These are authoritative — Step 8 verification must match them:
+
+```bash
+ls .github/workflows/*.yml .gitlab-ci.yml .circleci/config.yml Jenkinsfile 2>/dev/null
+```
+
+If a CI config exists, read it and extract any `eslint`, `tsc`, `npm run lint`,
+`npm run typecheck`, or `npm run test` invocations. Record these as `CI_LINT_CMD`,
+`CI_TSC_CMD`, and `CI_TEST_CMD`. These take priority over `detectedCommands` from
+`package.json` when verifying in Step 8.
 
 ---
 
@@ -293,13 +309,30 @@ follow-up task. Do not offer eslint-disable as an option.
 
 ## Step 8: Verification and Before/After Summary
 
+Use the project's actual commands — the same ones CI runs. Prefer CI-detected commands
+(from Step 1 CI detection) over `detectedCommands` from `package.json`, and use raw
+`npx` fallbacks only if neither exists:
+
+| Command | Priority 1 (CI config) | Priority 2 (package.json) | Fallback |
+|---|---|---|---|
+| Lint | `CI_LINT_CMD` | `npm run lint` | `npx eslint . --max-warnings=0` |
+| Typecheck | `CI_TSC_CMD` | `npm run typecheck` | `npx tsc --noEmit` |
+| Tests | `CI_TEST_CMD` | `npm run test` | (skip if no test script) |
+
+**Always** include `--max-warnings=0` when running ESLint directly. If the project's
+`npm run lint` script does not include this flag, run `npx eslint . --max-warnings=0`
+as an additional check.
+
 ```bash
-npx eslint .
-npx tsc --noEmit
-# Run tests (vitest run, jest, etc.)
+# Example using detected commands:
+npm run lint
+npm run typecheck
+npm run test
 ```
 
-If anything fails, diagnose and fix before declaring done.
+**Completion gate — you are NOT done until all commands exit 0.** Loop: diagnose the
+failure from the output, fix the code, re-run the failing command. Repeat until clean.
+Do not produce the Before/After Summary until every command passes.
 
 Once verification passes, produce a before/after summary comparing against the Step 6 baseline:
 
@@ -330,16 +363,37 @@ Install dependencies at root. Adapt per-app overrides to actual app names.
 
 ---
 
-## Step 9: Claude Code Integration (Optional, Claude Code Only)
+## Step 9: Claude Code Hook Installation
 
-If the user wants Claude Code hooks to auto-lint after every edit, read
-`references/claude-code-integration.md` for the full setup including:
+**Environment detection:** Check if a `.claude/` directory exists in the project root or any
+parent directory. If it does, you are inside Claude Code — proceed with this step automatically.
+If it does not exist, skip this step silently.
+
+```bash
+if [[ -d ".claude" ]] || [[ -d "../.claude" ]] || [[ -d "../../.claude" ]]; then
+  echo "Claude Code detected — installing hooks"
+else
+  echo "Not in Claude Code — skipping Step 9"
+fi
+```
+
+When Claude Code is detected, read `references/claude-code-integration.md` and execute the
+full setup without prompting the user. This includes:
 
 - TypeScript LSP plugin installation (`/plugin install typescript-lsp@claude-plugins-official`)
 - PostToolUse hook (per-file lint via `scripts/lint-typecheck-hook.sh`)
 - Stop hook (full project lint + typecheck)
 - Self-test validation (`scripts/validate-setup.sh`)
 - Hook reliability details (circuit breaker, graceful degradation, output truncation)
+
+After installation, inform the user what was set up and how to remove it:
+
+```
+Installed Claude Code lint hooks:
+- .claude/hooks/lint-typecheck.sh (PostToolUse: lints each file after edit)
+- .claude/settings.json hooks entry (Stop: full project lint + typecheck)
+To remove: delete .claude/hooks/lint-typecheck.sh and the "hooks" key from .claude/settings.json
+```
 
 ---
 

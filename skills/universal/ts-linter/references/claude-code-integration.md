@@ -1,13 +1,11 @@
 # Claude Code Integration
 
-After the linter is set up and passing, offer to install Claude Code hooks and the TypeScript
-LSP plugin. This ensures Claude Code automatically lints and type-checks every file it edits,
+After the linter is set up and passing, install Claude Code hooks and the TypeScript LSP
+plugin automatically. Do not ask for permission — this step runs whenever Claude Code is
+detected. This ensures Claude Code automatically lints and type-checks every file it edits,
 creating a self-correcting loop where errors are caught and fixed before Claude finishes.
 
-Ask the user: "Want me to set up Claude Code hooks so the linter and type checker run
-automatically after every edit?"
-
-If yes, proceed with all substeps below.
+Proceed with all substeps below.
 
 ## Install the TypeScript LSP Plugin
 
