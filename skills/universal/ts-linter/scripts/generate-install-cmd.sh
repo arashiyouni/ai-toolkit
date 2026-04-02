@@ -14,6 +14,7 @@ get_field() {
 }
 
 PKG_MANAGER=$(get_field "packageManager")
+MONOREPO=$(get_field "monorepo")
 REACT=$(get_field "react")
 REACT_NATIVE=$(get_field "reactNative")
 TANSTACK=$(get_field "tanstackQuery")
@@ -89,7 +90,14 @@ fi
 ALL_PKGS=("${CORE_PKGS[@]}" "${REACT_PKGS[@]}" "${NATIVE_PKGS[@]}" "${QUERY_PKGS[@]}" "${DRIZZLE_PKGS[@]}" "${TEST_PKGS[@]}" "${NODE_PKGS[@]}")
 
 case "$PKG_MANAGER" in
-  pnpm)  CMD="pnpm add -D" ;;
+  pnpm)
+    # pnpm monorepos require -w to install at the workspace root
+    if [[ "$MONOREPO" == "true" ]]; then
+      CMD="pnpm add -Dw"
+    else
+      CMD="pnpm add -D"
+    fi
+    ;;
   yarn)  CMD="yarn add -D" ;;
   bun)   CMD="bun add -D" ;;
   *)     CMD="npm install -D" ;;

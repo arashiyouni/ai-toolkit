@@ -78,6 +78,16 @@ export default defineConfig(
 	// Enables rules that read your tsconfig for type information.
 	// Update `allowDefaultProject` with any JS config files in
 	// your repo root that aren't covered by a tsconfig.
+	//
+	// MONOREPO NOTE (Turborepo / pnpm workspaces):
+	// Keep tsconfigRootDir pointed at the repo root. ESLint's
+	// projectService walks up from each file to find the nearest
+	// tsconfig.json, so per-app configs (apps/web/tsconfig.json)
+	// are picked up automatically. If the root tsconfig.json is a
+	// base config, do NOT set "include" in it — let each workspace
+	// define its own. If root-level .ts files (e.g. scripts/*.ts)
+	// still get "file not covered" errors, add them to
+	// allowDefaultProject below.
 	// ============================================================
 	{
 		languageOptions: {

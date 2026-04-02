@@ -366,6 +366,23 @@ This summary is mandatory — do not declare done without it.
 Place `eslint.config.mjs` at the root. Scope rules with file globs (`apps/web/**/*.tsx`).
 Install dependencies at root. Adapt per-app overrides to actual app names.
 
+**Turborepo / pnpm workspaces — tsconfig setup:**
+
+Turborepo projects typically have a root `tsconfig.json` that acts as a base config
+(`"compilerOptions"` only, no `"include"`), with per-workspace configs that extend it
+(e.g., `apps/web/tsconfig.json` with `"extends": "../../tsconfig.base.json"`). For
+ESLint's type-aware rules to work:
+
+1. Keep `tsconfigRootDir: import.meta.dirname` in the ESLint config (points to the root).
+   ESLint's `projectService` walks up from each file to find the nearest `tsconfig.json`.
+2. Do NOT set `"include"` in the root `tsconfig.json` — let each workspace config define
+   its own. A root `include` that covers everything can cause ESLint to use the wrong
+   tsconfig for workspace files.
+3. Add root-level scripts or config `.ts` files to `allowDefaultProject` if they aren't
+   covered by any tsconfig (e.g., `"scripts/seed.ts"`).
+4. If a workspace uses project references (`"references": [...]`), ESLint still resolves
+   correctly — no extra config needed.
+
 ---
 
 ## Step 9: Claude Code Hook Installation

@@ -134,13 +134,40 @@ if [[ -n "$RUNNER" ]]; then
     fail "TypeScript compiler not found"
   fi
 
-  tsc_check=$($RUNNER tsc --noEmit 2>&1)
-  tsc_exit=$?
+  # In Turborepo projects, `tsc --noEmit` at the root may check 0 files or fail
+  # because the root tsconfig is a base config without `include`. Use the project's
+  # typecheck script (which typically runs `turbo typecheck`) when available.
+  TSC_CMD=""
+  if [[ -f "package.json" ]]; then
+    TSC_CMD=$(node -e "
+      const pkg=JSON.parse(require('fs').readFileSync('package.json','utf8'));
+      const s=pkg.scripts||{};
+      const k=['typecheck','type-check','tsc','check'].find(k=>s[k]);
+      if(k)process.stdout.write(k);
+    " 2>/dev/null) || true
+  fi
+
+  if [[ -n "$TSC_CMD" ]]; then
+    # Detect run prefix
+    case "$RUNNER" in
+      bunx)      RUN_PFX="bun run" ;;
+      "yarn exec") RUN_PFX="yarn" ;;
+      *)         if [[ -f "pnpm-lock.yaml" ]]; then RUN_PFX="pnpm run"; else RUN_PFX="npm run"; fi ;;
+    esac
+    tsc_check=$($RUN_PFX "$TSC_CMD" 2>&1)
+    tsc_exit=$?
+    tsc_label="$RUN_PFX $TSC_CMD"
+  else
+    tsc_check=$($RUNNER tsc --noEmit 2>&1)
+    tsc_exit=$?
+    tsc_label="tsc --noEmit"
+  fi
+
   if [[ $tsc_exit -eq 0 ]]; then
-    pass "TypeScript compiles clean"
+    pass "TypeScript compiles clean ($tsc_label)"
   else
     error_count=$(echo "$tsc_check" | grep -c "error TS" || true)
-    warn "TypeScript has $error_count type errors (expected if linter was just added)"
+    warn "TypeScript has $error_count type errors via $tsc_label (expected if linter was just added)"
   fi
 else
   fail "Skipping TypeScript check (no runner)"
