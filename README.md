@@ -162,7 +162,7 @@ skills/[category]/[name]/
 └── assets/               # Templates, images, fonts (optional)
 ```
 
-Categories: `universal`, `frontend`, `backend`, `database`, `mobile`, `testing`, `cli`, `assistant`. Scaffold skills live alongside ready skills, distinguished by `metadata.status: scaffold`.
+Categories: `universal`, `frontend`, `backend`, `database`, `mobile`, `testing`, `cli`, `assistant`.
 
 ### Local Validation
 
@@ -195,6 +195,3 @@ Tips, guides, and deep dives on AI-assisted development — visit the [Ravn AI T
 - Making Claude Code Yours
 - Context Switching Done Right
 
-## In Development
-
-Several scaffold skills are under active development: `platform-mobile`, `tech-ios`, `tech-react-native`, `tech-prisma`, `tech-tanstack-router`, `tech-tanstack-form`, and `design-mobile`. These live in their role directory with `metadata.status: scaffold` and are not yet production-ready.

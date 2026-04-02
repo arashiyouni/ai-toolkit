@@ -373,7 +373,7 @@
         "jetpack",
         "mobile"
       ],
-      "extends": "platform-mobile",
+      "extends": "core-coding-standards",
       "status": "ready",
       "rules": 11,
       "version": 5
@@ -453,112 +453,6 @@
       ],
       "status": "ready",
       "version": 7
-    },
-    {
-      "name": "tech-prisma",
-      "source": "skills/database/tech-prisma",
-      "description": "Prisma ORM schema design, queries, relations, and migrations.",
-      "category": "database",
-      "tags": [
-        "prisma",
-        "orm",
-        "database",
-        "web"
-      ],
-      "extends": "platform-database",
-      "status": "scaffold",
-      "version": 1
-    },
-    {
-      "name": "tech-tanstack-form",
-      "source": "skills/frontend/tech-tanstack-form",
-      "description": "TanStack Form patterns for type-safe form state, validation, and field arrays.",
-      "category": "frontend",
-      "tags": [
-        "tanstack",
-        "forms",
-        "validation",
-        "web"
-      ],
-      "extends": "platform-frontend",
-      "status": "scaffold",
-      "version": 1
-    },
-    {
-      "name": "tech-tanstack-router",
-      "source": "skills/frontend/tech-tanstack-router",
-      "description": "TanStack Router patterns for type-safe file-based routing, loaders, and navigation.",
-      "category": "frontend",
-      "tags": [
-        "tanstack",
-        "router",
-        "routing",
-        "web"
-      ],
-      "extends": "platform-frontend",
-      "status": "scaffold",
-      "version": 1
-    },
-    {
-      "name": "design-mobile",
-      "source": "skills/mobile/design-mobile",
-      "description": "Mobile-specific visual design — touch targets, gestures, platform conventions.",
-      "category": "mobile",
-      "tags": [
-        "design",
-        "mobile",
-        "touch",
-        "gestures"
-      ],
-      "status": "scaffold",
-      "version": 1
-    },
-    {
-      "name": "platform-mobile",
-      "source": "skills/mobile/platform-mobile",
-      "description": "Cross-platform mobile development patterns — navigation, gestures, offline, performance.",
-      "category": "mobile",
-      "tags": [
-        "mobile",
-        "ios",
-        "android",
-        "navigation",
-        "offline"
-      ],
-      "extends": "core-coding-standards",
-      "status": "scaffold",
-      "version": 1
-    },
-    {
-      "name": "tech-ios",
-      "source": "skills/mobile/tech-ios",
-      "description": "iOS and Swift development patterns.",
-      "category": "mobile",
-      "tags": [
-        "ios",
-        "swift",
-        "swiftui",
-        "apple",
-        "mobile"
-      ],
-      "extends": "platform-mobile",
-      "status": "scaffold",
-      "version": 1
-    },
-    {
-      "name": "tech-react-native",
-      "source": "skills/mobile/tech-react-native",
-      "description": "React Native development patterns — Expo, navigation, native modules.",
-      "category": "mobile",
-      "tags": [
-        "react-native",
-        "expo",
-        "mobile",
-        "cross-platform"
-      ],
-      "extends": "platform-mobile",
-      "status": "scaffold",
-      "version": 1
     },
     {
       "name": "ts-linter",
