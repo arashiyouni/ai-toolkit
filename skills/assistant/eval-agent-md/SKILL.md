@@ -9,6 +9,14 @@ description: 'Behavioral compliance testing for any CLAUDE.md or agent definitio
   "compliance test", "test my CLAUDE.md", "check rules", "behavioral test", "/eval-agent-md".
   Do not trigger for: editing or writing CLAUDE.md rules, general code review, adding
   linting config, or any task that is not explicitly about testing behavioral compliance.'
+allowed-tools:
+- Bash
+- Read
+- Write
+- Edit
+- Grep
+- Glob
+- Agent
 metadata:
   category: assistant
   tags:
