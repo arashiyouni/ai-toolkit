@@ -390,6 +390,10 @@ def run_scenario(model: str, system_file: Path, scenario: dict, runs: int,
             "avg_word_count": sum(s["word_count"] for s in response_sizes) / max(len(response_sizes), 1),
         },
     }
+    # Include scenario definition for review tooling
+    result["prompt"] = scenario["prompt"]
+    result["pass_criteria"] = scenario.get("pass_criteria", [])
+    result["fail_signals"] = scenario.get("fail_signals", [])
     if is_integration(scenario):
         result["type"] = "integration"
         result["rules_tested"] = scenario.get("rules_tested", [])
